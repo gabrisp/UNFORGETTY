@@ -165,36 +165,31 @@ private struct LockScreenActivityView: View {
     var body: some View {
         if let draft {
             VStack(alignment: draft.style.horizontalAlignment, spacing: 14) {
-                if !draft.title.isEmpty { Text(draft.title).font(.headline) }
                 if draft.kind == "note" {
-                    Text(draft.body)
+                    Text(noteText(for: draft))
                         .font(.system(size: draft.style.textSize))
                         .multilineTextAlignment(draft.style.textAlignment)
                         .lineLimit(5)
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: draft.style.contentAlignment)
+                        .opacity(isNotePlaceholder(draft) ? 0.45 : 1)
                 }
                 else {
-                    ForEach(draft.checklistItems.prefix(6)) { item in
-                        Button(intent: ToggleChecklistItemIntent(notificationID: notificationID, itemID: item.id)) {
-                            HStack(spacing: 12) {
-                                checkbox(isCompleted: item.isCompleted, color: Color(hex: draft.style.textHex), textSize: draft.style.textSize)
-                                Text(item.text)
-                                    .font(.system(size: draft.style.textSize))
-                                    .strikethrough(item.isCompleted)
-                            }
-                            .frame(maxWidth: .infinity, alignment: draft.style.contentAlignment)
-                            .contentShape(.rect)
+                    if displayedChecklistItems(for: draft).count == 6 {
+                        HStack(alignment: .top, spacing: 18) {
+                            checklistColumn(Array(displayedChecklistItems(for: draft).prefix(3)), draft: draft)
+                            checklistColumn(Array(displayedChecklistItems(for: draft).suffix(3)), draft: draft)
                         }
-                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity, alignment: draft.style.contentAlignment)
+                    } else {
+                        checklistColumn(displayedChecklistItems(for: draft), draft: draft)
+                            .frame(maxWidth: .infinity, alignment: draft.style.contentAlignment)
                     }
-                }
-                if draft.kind == "note" && draft.isStrict && !draft.noteIsCompleted {
-                    Button(intent: CompleteNoteIntent(notificationID: notificationID)) { Label("Marcar como hecha", systemImage: "checkmark.circle") }.buttonStyle(.bordered)
                 }
             }
             .foregroundStyle(Color(hex: draft.style.textHex))
             .padding(24)
-            .frame(maxHeight: 300, alignment: .center)
+            .frame(maxWidth: .infinity, maxHeight: 300, alignment: .topLeading)
             .clipped()
         } else { Text("Abre Unforgetty para recuperar esta actividad.").padding() }
     }
@@ -212,6 +207,51 @@ private struct LockScreenActivityView: View {
                     .font(.system(size: size * 0.66, weight: .bold))
             }
         }
+    }
+
+    private func noteText(for draft: WidgetDraft) -> String {
+        isNotePlaceholder(draft) ? "Note" : draft.body
+    }
+
+    private func isNotePlaceholder(_ draft: WidgetDraft) -> Bool {
+        draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func checklistText(for item: WidgetChecklistItem) -> String {
+        isChecklistPlaceholder(item) ? "To Do" : item.text
+    }
+
+    private func isChecklistPlaceholder(_ item: WidgetChecklistItem) -> Bool {
+        item.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func displayedChecklistItems(for draft: WidgetDraft) -> [WidgetChecklistItem] {
+        Array(draft.checklistItems.prefix(6))
+    }
+
+    private func checklistColumn(_ items: [WidgetChecklistItem], draft: WidgetDraft) -> some View {
+        VStack(alignment: draft.style.horizontalAlignment, spacing: 14) {
+            ForEach(items) { item in
+                checklistRow(item, draft: draft)
+            }
+        }
+    }
+
+    private func checklistRow(_ item: WidgetChecklistItem, draft: WidgetDraft) -> some View {
+        Button(intent: ToggleChecklistItemIntent(notificationID: notificationID, itemID: item.id)) {
+            HStack(spacing: 12) {
+                checkbox(isCompleted: item.isCompleted, color: Color(hex: draft.style.textHex), textSize: draft.style.textSize)
+                Text(checklistText(for: item))
+                    .font(.system(size: draft.style.textSize))
+                    .strikethrough(item.isCompleted)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .opacity(isChecklistPlaceholder(item) ? 0.45 : 1)
+            }
+            .frame(maxWidth: .infinity, alignment: draft.style.contentAlignment)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
     }
 }
 

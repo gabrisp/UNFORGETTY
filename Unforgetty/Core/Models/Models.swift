@@ -72,9 +72,16 @@ enum ActivityKind: Codable, CaseIterable, Identifiable, Hashable {
 }
 
 enum ActivityStatus: String, Codable, CaseIterable, Identifiable {
-    case active, scheduled, completed
+    case draft, active, scheduled, completed
     var id: Self { self }
-    var title: String { switch self { case .active: "Activas"; case .scheduled: "Programadas"; case .completed: "Completadas" } }
+    var title: String {
+        switch self {
+        case .draft: "Borrador"
+        case .active: "Activas"
+        case .scheduled: "Programadas"
+        case .completed: "Completadas"
+        }
+    }
 }
 
 enum ActivitySurface: String, Codable, CaseIterable, Identifiable {

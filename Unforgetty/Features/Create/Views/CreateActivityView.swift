@@ -16,6 +16,11 @@ struct CreateActivityView: View {
     private let actionBarSlotHeight: CGFloat = 44
 
     var body: some View {
+        CreateActivityV2View(progress: $progress)
+    }
+
+    @ViewBuilder
+    private var legacyBody: some View {
         NavigationStack {
             ScrollView(.horizontal) {
                 HStack(spacing: 0) {

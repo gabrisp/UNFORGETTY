@@ -6,6 +6,6 @@ final class CreatedActivitiesViewModel: ObservableObject {
     @Published var showingPaywall = false
 
     func visibleActivities(from activities: [ScheduledActivity]) -> [ScheduledActivity] {
-        activities.filter { $0.status != .completed }
+        activities.filter { $0.status != .completed && $0.status != .draft }
     }
 }
