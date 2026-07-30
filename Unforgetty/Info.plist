@@ -6,5 +6,19 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>RevenueCatAPIKey</key>
+	<string>test_fOMAImNtrTplmjIbAVBIiNugnEj</string>
+	<key>AppwriteProjectID</key>
+	<string>6a6a5db3000d6d513cd1</string>
+	<key>AppwriteProjectName</key>
+	<string>Unforgetty</string>
+	<key>AppwritePublicEndpoint</key>
+	<string>https://appwrite.repzet.app/v1</string>
+	<key>AppwriteSchedulerFunctionID</key>
+	<string>activity-scheduler</string>
+	<key>AppwriteAPNSProviderID</key>
+	<string>6a6a5e110020225bd21b</string>
 </dict>
 </plist>
