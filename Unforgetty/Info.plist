@@ -8,6 +8,12 @@
 	</array>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Unforgetty usa tus recordatorios para mostrarlos y completarlos en tus Live Activities.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Unforgetty usa tu ubicación para iniciar actividades al llegar a un lugar.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Unforgetty necesita detectar cuándo llegas a una ubicación programada.</string>
 	<key>RevenueCatAPIKey</key>
 	<string>test_fOMAImNtrTplmjIbAVBIiNugnEj</string>
 	<key>AppwriteProjectID</key>
@@ -18,7 +24,24 @@
 	<string>https://appwrite.repzet.app/v1</string>
 	<key>AppwriteSchedulerFunctionID</key>
 	<string>activity-scheduler</string>
+	<key>AppwriteSocialFunctionID</key>
+	<string>social</string>
+	<key>AppwriteSpotifyFunctionID</key>
+	<string>spotify</string>
 	<key>AppwriteAPNSProviderID</key>
 	<string>6a6a5e110020225bd21b</string>
+	<key>SpotifyClientID</key>
+	<string>db2b0839d7bf466f94621eafd45bba9d</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.gabrisp.Unforgetty</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>unforgetty</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

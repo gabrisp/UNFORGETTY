@@ -1,0 +1,8 @@
+{
+  "name": "unforgetty-anonymous-session",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "node-appwrite": "^14.0.1"
+  }
+}

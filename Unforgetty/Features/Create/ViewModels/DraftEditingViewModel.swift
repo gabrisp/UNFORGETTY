@@ -32,6 +32,33 @@ extension DraftEditingViewModel {
         withAnimation(.snappy) { draft.checklistItems.append(ChecklistItem(text: "")) }
     }
 
+    @discardableResult
+    func addLiveActionItem() -> UUID? {
+        guard draft.liveActionItems.count < 8 else { return nil }
+        let item = defaultLiveActionItem(for: draft.liveActionItems.count)
+        withAnimation(.snappy) {
+            draft.liveActionItems.append(item)
+        }
+        return item.id
+    }
+
+    func ensureDefaultLiveActions() {
+        guard draft.liveActionItems.isEmpty else { return }
+        withAnimation(.snappy) {
+            draft.liveActionItems = [
+                LiveActionItem(title: "Shortcut", kind: .shortcut, icon: "bolt.fill", target: "Morning"),
+                LiveActionItem(title: "Open App", kind: .openApp, icon: "app.fill", target: "shortcuts://"),
+                LiveActionItem(title: "Open Link", kind: .openLink, icon: "link", target: "https://apple.com")
+            ]
+        }
+    }
+
+    func removeLiveActionItem(id: UUID) {
+        withAnimation(.snappy) {
+            draft.liveActionItems.removeAll { $0.id == id }
+        }
+    }
+
     func removeChecklistItem(_ item: ChecklistItem) {
         guard draft.checklistItems.count > 1 else { return }
         withAnimation(.snappy) { draft.checklistItems.removeAll { $0.id == item.id } }
@@ -51,6 +78,22 @@ extension DraftEditingViewModel {
     private func ensureMinimumChecklistItem() {
         guard draft.checklistItems.isEmpty else { return }
         draft.checklistItems = [ChecklistItem(text: "")]
+    }
+
+    private func defaultLiveActionItem(for index: Int) -> LiveActionItem {
+        let presets: [LiveActionItem] = [
+            LiveActionItem(title: "Shortcut", kind: .shortcut, icon: "bolt.fill", target: "Morning"),
+            LiveActionItem(title: "Open App", kind: .openApp, icon: "app.fill", target: "shortcuts://"),
+            LiveActionItem(title: "Open Link", kind: .openLink, icon: "link", target: "https://apple.com"),
+            LiveActionItem(title: "Music", kind: .openApp, icon: "music.note", target: "music://"),
+            LiveActionItem(title: "Timer", kind: .openApp, icon: "timer", target: "clock-timer://")
+        ]
+
+        if presets.indices.contains(index) {
+            return presets[index]
+        }
+
+        return LiveActionItem(title: "Action \(index + 1)", kind: .openLink, icon: "sparkles", target: "")
     }
 
     /// Splits pasted multi-line text so each line becomes its own task.

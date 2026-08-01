@@ -7,6 +7,10 @@
 
 import SwiftUI
 
+protocol CustomTabBarItem: CaseIterable, Hashable {
+    var title: String { get }
+}
+
 extension View {
     @ViewBuilder
     func hideNativeTabBar() -> some View {
@@ -20,6 +24,98 @@ extension ScrollView {
     func adoptForIGTabBar(_ progress: Binding<CGFloat>) -> some View {
         self
             .modifier(IGTabBarViewModifier(progress: progress))
+    }
+}
+
+struct CustomTabBar<Value: CustomTabBarItem>: UIViewRepresentable {
+    @Binding var selection: Value
+    var selectedTextColor: Color = .primary
+    var normalTextColor: Color = .secondary
+    var selectedTintColor: Color = .gray.opacity(0.25)
+    var onInteraction: (Value) -> Void = { _ in }
+
+    init(
+        selection: Binding<Value>,
+        selectedTextColor: Color = .primary,
+        normalTextColor: Color = .secondary,
+        selectedTintColor: Color = .gray.opacity(0.25),
+        onInteraction: @escaping (Value) -> Void = { _ in }
+    ) {
+        _selection = selection
+        self.selectedTextColor = selectedTextColor
+        self.normalTextColor = normalTextColor
+        self.selectedTintColor = selectedTintColor
+        self.onInteraction = onInteraction
+    }
+
+    func makeUIView(context: Context) -> CustomSegmentedControl {
+        let tabs = Array(Value.allCases)
+        let control = CustomSegmentedControl(items: tabs.map(\.title))
+        control.selectedSegmentIndex = tabs.firstIndex(of: selection) ?? 0
+        control.selectedSegmentTintColor = UIColor(selectedTintColor)
+        control.backgroundColor = .clear
+        control.tintColor = .clear
+        control.configureTransparentBackground()
+        control.setTitleTextAttributes([
+            .foregroundColor: UIColor(selectedTextColor),
+            .font: UIFont.systemFont(ofSize: 15, weight: .semibold)
+        ], for: .selected)
+        control.setTitleTextAttributes([
+            .foregroundColor: UIColor(normalTextColor),
+            .font: UIFont.systemFont(ofSize: 15, weight: .semibold)
+        ], for: .normal)
+        control.addTarget(
+            context.coordinator,
+            action: #selector(context.coordinator.valueChanged(_:)),
+            for: .valueChanged
+        )
+
+        return control
+    }
+
+    func updateUIView(_ uiView: CustomSegmentedControl, context: Context) {
+        let selectedIndex = Array(Value.allCases).firstIndex(of: selection) ?? 0
+        if uiView.selectedSegmentIndex != selectedIndex {
+            uiView.selectedSegmentIndex = selectedIndex
+        }
+
+        uiView.selectedSegmentTintColor = UIColor(selectedTintColor)
+        uiView.setTitleTextAttributes([
+            .foregroundColor: UIColor(selectedTextColor),
+            .font: UIFont.systemFont(ofSize: 15, weight: .semibold)
+        ], for: .selected)
+        uiView.setTitleTextAttributes([
+            .foregroundColor: UIColor(normalTextColor),
+            .font: UIFont.systemFont(ofSize: 15, weight: .semibold)
+        ], for: .normal)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: CustomSegmentedControl, context: Context) -> CGSize? {
+        .init(
+            width: proposal.width ?? CGFloat(Array(Value.allCases).count) * 150,
+            height: 50
+        )
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    class Coordinator: NSObject {
+        var parent: CustomTabBar
+
+        init(parent: CustomTabBar) {
+            self.parent = parent
+        }
+
+        @objc
+        func valueChanged(_ sender: UISegmentedControl) {
+            let tabs = Array(Value.allCases)
+            guard tabs.indices.contains(sender.selectedSegmentIndex) else { return }
+            let tab = tabs[sender.selectedSegmentIndex]
+            parent.selection = tab
+            parent.onInteraction(tab)
+        }
     }
 }
 

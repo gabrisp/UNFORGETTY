@@ -20,6 +20,10 @@ struct TagsEditorView<VM: DraftEditingViewModel>: View {
             }
             HStack {
                 TextField("Nueva etiqueta", text: $viewModel.tagName)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        viewModel.addTag(named: viewModel.tagName, store: store)
+                    }
                 Button("Añadir") { viewModel.addTag(named: viewModel.tagName, store: store) }
                     .contentShape(.rect)
             }

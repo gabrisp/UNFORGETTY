@@ -1,0 +1,67 @@
+import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
+
+enum ImagePreparation {
+    // Live Activities run under a much tighter memory budget than a normal widget — a decoded
+    // bitmap scales with width*height regardless of how small the on-screen frame actually is
+    // (scaledToFill just crops it), so oversized source images can silently fail to render at
+    // all in the real Live Activity even though they look fine in-app. The largest this content
+    // is ever displayed at is well under 700px on the longest side, so there's no visual cost.
+    private static let maxDimension: CGFloat = 700
+    private static let compressionQuality: CGFloat = 0.75
+
+    static func preparedBackgroundImageData(from data: Data) -> Data {
+        #if canImport(UIKit)
+        guard let image = UIImage(data: data) else { return data }
+        let longestSide = max(image.size.width, image.size.height)
+        guard longestSide > maxDimension else {
+            return image.jpegData(compressionQuality: compressionQuality) ?? data
+        }
+
+        let scale = maxDimension / longestSide
+        let targetSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        let resizedImage = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+        return resizedImage.jpegData(compressionQuality: compressionQuality) ?? data
+        #else
+        return data
+        #endif
+    }
+
+    /// Two representative colors sampled from the top and bottom of the image (as hex strings, no
+    /// `#`) — used to auto-derive a `.music` card's gradient from its album art. Draws into an
+    /// explicit 1×2 RGBA8888 bitmap context rather than relying on a resizing renderer's default
+    /// pixel format, so the byte order read back out is known for certain.
+    static func gradientHexPair(from data: Data) -> (start: String, end: String)? {
+        #if canImport(UIKit)
+        guard let cgImage = UIImage(data: data)?.cgImage else { return nil }
+        let width = 1
+        let height = 2
+        let bytesPerRow = width * 4
+        var pixelData = [UInt8](repeating: 0, count: bytesPerRow * height)
+        guard let context = CGContext(
+            data: &pixelData,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        context.interpolationQuality = .medium
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        func hex(row: Int) -> String {
+            let offset = row * bytesPerRow
+            return String(format: "%02X%02X%02X", pixelData[offset], pixelData[offset + 1], pixelData[offset + 2])
+        }
+        return (hex(row: 0), hex(row: 1))
+        #else
+        return nil
+        #endif
+    }
+}

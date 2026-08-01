@@ -22,7 +22,8 @@ extension ActivityStore {
     func purchase(productID: String) async {
         do {
             let offerings = try await Purchases.shared.offerings()
-            guard let package = offerings.current?.availablePackages.first(where: { $0.storeProduct.productIdentifier == productID }) else { throw PurchaseError.productUnavailable }
+            let offering = offerings.offering(identifier: "default") ?? offerings.current
+            guard let package = offering?.availablePackages.first(where: { $0.storeProduct.productIdentifier == productID }) else { throw PurchaseError.productUnavailable }
             let result = try await Purchases.shared.purchase(package: package)
             isPremium = result.customerInfo.entitlements["premium"]?.isActive == true
             EventTracker.track("purchase_completed")
