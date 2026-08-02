@@ -292,35 +292,17 @@ nonisolated enum SharedImageStore {
     }()
 
     static func save(_ data: Data?, name: String) {
-        guard let url = directoryURL?.appendingPathComponent(name) else {
-            NSLog("Unforgetty SharedImageStore: no App Group container URL, cannot save %@", name)
-            return
-        }
+        guard let url = directoryURL?.appendingPathComponent(name) else { return }
         guard let data else {
             try? FileManager.default.removeItem(at: url)
             return
         }
-        do {
-            try data.write(to: url, options: .atomic)
-            NSLog("Unforgetty SharedImageStore: saved %@ (%d bytes) to %@", name, data.count, url.path)
-        } catch {
-            NSLog("Unforgetty SharedImageStore: FAILED to save %@: %@", name, error.localizedDescription)
-        }
+        try? data.write(to: url, options: .atomic)
     }
 
     static func load(name: String) -> Data? {
-        guard let url = directoryURL?.appendingPathComponent(name) else {
-            NSLog("Unforgetty SharedImageStore: no App Group container URL, cannot load %@", name)
-            return nil
-        }
-        do {
-            let data = try Data(contentsOf: url)
-            NSLog("Unforgetty SharedImageStore: loaded %@ (%d bytes) from %@", name, data.count, url.path)
-            return data
-        } catch {
-            NSLog("Unforgetty SharedImageStore: no file / failed to load %@ at %@: %@", name, url.path, error.localizedDescription)
-            return nil
-        }
+        guard let url = directoryURL?.appendingPathComponent(name) else { return nil }
+        return try? Data(contentsOf: url)
     }
 
     static func deleteAll(notificationID: String) {
@@ -333,11 +315,9 @@ nonisolated enum WidgetContentStore {
     static let defaults = UserDefaults(suiteName: "group.com.gabrisp.Unforgetty") ?? .standard
 
     static func draft(for notificationID: String) -> WidgetDraft? {
-        guard
-            let data = defaults.data(forKey: "activities.v1"),
-            let values = try? JSONDecoder().decode([WidgetActivity].self, from: data),
-            var draft = values.first(where: { $0.notificationID == notificationID })?.draft
-        else { return nil }
+        guard let data = defaults.data(forKey: "activities.v1") else { return nil }
+        guard let values = try? JSONDecoder().decode([WidgetActivity].self, from: data) else { return nil }
+        guard var draft = values.first(where: { $0.notificationID == notificationID })?.draft else { return nil }
 
         // Image bytes are never embedded in this JSON blob (see SharedImageStore) — only this one
         // activity's images get loaded from disk, not every saved activity's.
@@ -378,6 +358,25 @@ nonisolated enum WidgetContentStore {
 
     static func receivedFriendPing(notificationID: String) -> ReceivedFriendPing? {
         receivedFriendPings().first { $0.notificationID == notificationID }
+    }
+
+    static func deleteReceivedFriendPing(notificationID: String) {
+        var pings = receivedFriendPings()
+        guard pings.contains(where: { $0.notificationID == notificationID }) else { return }
+        pings.removeAll { $0.notificationID == notificationID }
+        defaults.set(try? JSONEncoder().encode(pings), forKey: receivedFriendPingsKey)
+        defaults.removeObject(forKey: "musicArt.\(notificationID)")
+    }
+
+    /// `saveReceivedFriendPing` is deliberately insert-only (idempotent against the widget calling
+    /// it repeatedly for the same push) — it never applies a *later* `.update` push's changed
+    /// content onto an already-stored ping. This is the explicit "pull the latest state" path,
+    /// used by the app's own "reload" action against whatever's currently running.
+    static func updateReceivedFriendPing(notificationID: String, fromUsername: String, message: String?, snapshot: FriendActivitySnapshot) {
+        var pings = receivedFriendPings()
+        guard let index = pings.firstIndex(where: { $0.notificationID == notificationID }) else { return }
+        pings[index] = ReceivedFriendPing(notificationID: notificationID, fromUsername: fromUsername, message: message, snapshot: snapshot, receivedAt: pings[index].receivedAt)
+        defaults.set(try? JSONEncoder().encode(pings), forKey: receivedFriendPingsKey)
     }
 
     static func toggle(itemID: UUID, notificationID: String) -> (reminderID: String, isCompleted: Bool)? {
@@ -458,7 +457,8 @@ nonisolated enum WidgetLiveActivityRefresher {
     /// the content state (see `FriendActivitySnapshot`'s doc comment), so rebuilding from scratch
     /// would silently wipe it on every refresh.
     static func refresh(notificationID: String) async {
-        for activity in Activity<UnforgettyActivityAttributes>.activities where activity.attributes.notificationID == notificationID {
+        let matching = Activity<UnforgettyActivityAttributes>.activities.filter { $0.attributes.notificationID == notificationID }
+        for activity in matching {
             var state = activity.content.state
             state.phase = UUID().uuidString
             await activity.update(ActivityContent(state: state, staleDate: nil))

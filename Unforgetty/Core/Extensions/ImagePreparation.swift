@@ -7,26 +7,39 @@ enum ImagePreparation {
     // Live Activities run under a much tighter memory budget than a normal widget — a decoded
     // bitmap scales with width*height regardless of how small the on-screen frame actually is
     // (scaledToFill just crops it), so oversized source images can silently fail to render at
-    // all in the real Live Activity even though they look fine in-app. The largest this content
-    // is ever displayed at is well under 700px on the longest side, so there's no visual cost.
-    private static let maxDimension: CGFloat = 700
-    private static let compressionQuality: CGFloat = 0.75
+    // all in the real Live Activity even though they look fine in-app. Rather than hand-pick a
+    // dimension/quality pair and hope it's small enough, shrink in a loop until the actual
+    // encoded size is under the target — guarantees the ceiling instead of guessing at it.
+    private static let targetMaxBytes = 30_000
+    private static let startingMaxDimension: CGFloat = 300
+    private static let maxIterations = 8
 
     static func preparedBackgroundImageData(from data: Data) -> Data {
         #if canImport(UIKit)
         guard let image = UIImage(data: data) else { return data }
-        let longestSide = max(image.size.width, image.size.height)
-        guard longestSide > maxDimension else {
-            return image.jpegData(compressionQuality: compressionQuality) ?? data
-        }
 
-        let scale = maxDimension / longestSide
-        let targetSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: targetSize)
-        let resizedImage = renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: targetSize))
+        // Cap the starting pixel dimension unconditionally — what actually stresses a Live
+        // Activity's memory budget is the *decoded* bitmap (width × height × 4 bytes), not the
+        // JPEG file size, so a low-detail full-resolution photo that happens to compress under
+        // the byte target on the first pass would otherwise still decode at full resolution.
+        var dimension = min(max(image.size.width, image.size.height), startingMaxDimension)
+        var quality: CGFloat = 0.6
+        var best = data
+
+        for _ in 0..<maxIterations {
+            let scale = min(1, dimension / max(image.size.width, image.size.height))
+            let targetSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+            let renderer = UIGraphicsImageRenderer(size: targetSize)
+            let resized = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: targetSize)) }
+            guard let encoded = resized.jpegData(compressionQuality: quality) else { break }
+            best = encoded
+            if encoded.count <= targetMaxBytes { break }
+
+            // Still too big — shrink both dimension and quality for the next pass.
+            dimension *= 0.75
+            quality = max(0.2, quality - 0.15)
         }
-        return resizedImage.jpegData(compressionQuality: compressionQuality) ?? data
+        return best
         #else
         return data
         #endif

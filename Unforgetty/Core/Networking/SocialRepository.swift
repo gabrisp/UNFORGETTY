@@ -72,11 +72,22 @@ actor SocialRepository {
         let _: StatusResponse = try await execute(action: "updatePushToken", extra: ["pushToStartToken": token])
     }
 
-    func sendToFriend(fromUsername: String, toUsername: String, message: String, snapshot: FriendActivitySnapshot) async throws {
+    /// Called by the recipient of a friend ping once ActivityKit hands back a per-activity update
+    /// push token, so a later resend from the sender can target this specific running activity
+    /// with `.update` instead of starting a duplicate. `message` seeds the server's "did the
+    /// message change since last send" comparison for the very first registration.
+    func registerActivityUpdateToken(notificationID: String, activityUpdateToken: String, message: String?) async throws {
+        var extra: [String: Any] = ["notificationID": notificationID, "activityUpdateToken": activityUpdateToken]
+        if let message { extra["message"] = message }
+        let _: StatusResponse = try await execute(action: "registerActivityUpdateToken", extra: extra)
+    }
+
+    func sendToFriend(fromUsername: String, toUsername: String, message: String, notificationID: String, snapshot: FriendActivitySnapshot) async throws {
         let _: StatusResponse = try await execute(action: "sendToFriend", extra: [
             "fromUsername": fromUsername,
             "toUsername": toUsername,
             "message": message,
+            "notificationID": notificationID,
             "snapshot": [
                 "kind": snapshot.kind,
                 "body": snapshot.body,

@@ -61,6 +61,7 @@ struct UnforgettyApp: App {
                 .environmentObject(flow)
                 .task {
                     LiveActivityController.observePushToStartToken()
+                    LiveActivityController.observeFriendPingUpdateTokens()
                     await flow.bootstrap(store: store)
                 }
                 #if canImport(UIKit)

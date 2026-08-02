@@ -778,6 +778,19 @@ struct ActivityEditionsClipboard: Hashable {
         scheduleTime = viewModel.scheduleTime
     }
 
+    /// Lets "Copiar" on a received friend ping feed the same clipboard used to paste style/editions
+    /// between local activities — the received card has no `CreateActivityV2EditViewModel` of its
+    /// own to build from.
+    init(snapshot: FriendActivitySnapshot) {
+        kind = snapshot.kind == "music" ? .music : .note
+        style = ActivityStyle(snapshot: snapshot)
+        isStrict = false
+        blurContentMode = .never
+        isScheduling = false
+        selectedWeekdays = []
+        scheduleTime = .now
+    }
+
     @MainActor
     func apply(to viewModel: CreateActivityV2EditViewModel) {
         viewModel.setKind(kind)

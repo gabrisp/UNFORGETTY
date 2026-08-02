@@ -238,9 +238,13 @@ final class CreateActivityV2EditViewModel: DraftEditingViewModel, ObservableObje
                 return false
             }
             let snapshot = draft.friendActivitySnapshot
+            // Stable per activity, shared with every friend it's sent to (and echoed back to us as
+            // ContentState.notificationID) so a resend can find and update the existing Live
+            // Activity instead of pushToStart-ing a duplicate.
+            let notificationID = activity.id.uuidString
             do {
                 for toUsername in sendToFriendUsernames {
-                    try await SocialRepository.shared.sendToFriend(fromUsername: myUsername, toUsername: toUsername, message: trimmedMessage, snapshot: snapshot)
+                    try await SocialRepository.shared.sendToFriend(fromUsername: myUsername, toUsername: toUsername, message: trimmedMessage, notificationID: notificationID, snapshot: snapshot)
                 }
                 friendMessage = ""
                 EventTracker.track("friend_ping_sent")

@@ -14,6 +14,10 @@ final class ActivityStore: ObservableObject {
     }
     @Published var isPremium = false
     @Published var purchaseError: String?
+    // Lives here (not as local @State in one screen) so "Copiar" on a received friend ping — a
+    // separate tab/screen with no shared view hierarchy with the editor — can feed the same
+    // clipboard the editor's own copy/paste-editions buttons read from.
+    @Published var copiedEditions: ActivityEditionsClipboard?
     private var liveActivityUpdatesTask: Task<Void, Never>?
     private var liveActivityStateTasks: [String: Task<Void, Never>] = [:]
 
@@ -129,6 +133,9 @@ final class ActivityStore: ObservableObject {
         if activity.surface == .notification {
             LocalNotificationScheduler.cancel(activity)
         }
+        if let liveActivityID = activity.liveActivityID {
+            Task { await LiveActivityController.end(id: liveActivityID) }
+        }
         activities.removeAll { $0.id == activity.id }
         SharedImageStore.deleteAll(notificationID: activity.notificationID)
     }
@@ -136,6 +143,9 @@ final class ActivityStore: ObservableObject {
     func deleteLiveActivityCard(id: UUID) {
         guard let activity = activities.first(where: { $0.id == id }), canDelete(activity) else { return }
         LocationActivityMonitor.shared.unregister(activity)
+        if let liveActivityID = activity.liveActivityID {
+            Task { await LiveActivityController.end(id: liveActivityID) }
+        }
         activities.removeAll { $0.id == id }
         SharedImageStore.deleteAll(notificationID: activity.notificationID)
     }

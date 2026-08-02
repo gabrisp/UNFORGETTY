@@ -14,7 +14,6 @@ struct CreateActivityV2View: View {
     @State private var isKeyboardVisible = false
     @State private var cardHeights: [UUID: CGFloat] = [:]
     @State private var info = Info()
-    @State private var copiedEditions: ActivityEditionsClipboard?
     @State private var editedLiveAction: LiveActionSelection?
     @State private var isPickingFriends = false
     @State private var isPickingSong = false
@@ -228,7 +227,7 @@ struct CreateActivityV2View: View {
                     .environmentObject(store)
                     .transition(.blurReplace.combined(with: .opacity))
                 } else {
-                    CreateActivityV2EditSheet(viewModel: editViewModel, copiedEditions: $copiedEditions)
+                    CreateActivityV2EditSheet(viewModel: editViewModel, copiedEditions: $store.copiedEditions)
                         .transition(.blurReplace.combined(with: .opacity))
                 }
             }
@@ -277,6 +276,16 @@ struct CreateActivityV2View: View {
             presentedSheetActivity: $presentedSheetActivity,
             selectedActivity: $selectedActivity
         )
+        // "Reeditar" on a received friend ping (a separate tab) saves the new draft into `store`
+        // then flags it here rather than reaching into this view's local state directly — the two
+        // tabs share no view hierarchy, only `store`/`flow`.
+        .onChange(of: flow.pendingSelectedActivityID) { _, newValue in
+            guard let newValue, let activity = store.liveActivityCards.first(where: { $0.id == newValue }) else { return }
+            withAnimation(animation) {
+                select(activity)
+            }
+            flow.pendingSelectedActivityID = nil
+        }
     }
 
     @ViewBuilder
@@ -911,10 +920,9 @@ private struct SelectedActivityPreview: View {
                 isEditingMusic: isPickingSong
             )
 
-            // Disabled for now.
-            // if showsStatusPill, let statusPillKind {
-            //     statusPill(statusPillKind)
-            // }
+            if showsStatusPill, let statusPillKind {
+                statusPill(statusPillKind)
+            }
 
 //            ActivityKindCircleSelector(viewModel: viewModel)
 //                .environmentObject(store)

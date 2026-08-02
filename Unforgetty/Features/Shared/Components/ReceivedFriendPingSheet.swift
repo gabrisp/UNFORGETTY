@@ -1,32 +1,5 @@
 import SwiftUI
 
-private extension ActivityStyle {
-    init(snapshot: FriendActivitySnapshot) {
-        self.init()
-        backgroundHex = snapshot.backgroundHex
-        backgroundMode = BackgroundMode(rawValue: snapshot.backgroundMode) ?? .plain
-        gradientStartHex = snapshot.gradientStartHex
-        gradientEndHex = snapshot.gradientEndHex
-        gradientKind = GradientKind(rawValue: snapshot.gradientKind) ?? .linear
-        gradientAngle = snapshot.gradientAngle
-        gradientCenterX = snapshot.gradientCenterX
-        gradientCenterY = snapshot.gradientCenterY
-        textHex = snapshot.textHex
-        font = FontChoice(rawValue: snapshot.font) ?? .rounded
-        textSize = snapshot.textSize
-        alignment = TextAlignmentChoice(rawValue: snapshot.alignment) ?? .leading
-        verticalAlignment = VerticalAlignmentChoice(rawValue: snapshot.verticalAlignment) ?? .center
-        borderHex = snapshot.borderHex
-        borderWidth = snapshot.borderWidth
-        musicLayout = MusicLayout(rawValue: snapshot.musicLayout) ?? .disc
-        musicBorderEnabled = snapshot.musicBorderEnabled
-        musicBorderHex = snapshot.musicBorderHex
-        musicShowsTitle = snapshot.musicShowsTitle
-        musicShowsArtist = snapshot.musicShowsArtist
-        musicShowsAlbum = snapshot.musicShowsAlbum
-    }
-}
-
 struct ReceivedFriendPingSheet: View {
     @Environment(\.dismiss) private var dismiss
     let ping: ReceivedFriendPing
@@ -49,6 +22,7 @@ struct ReceivedFriendPingSheet: View {
                     Text(noteText)
                         .font(.system(size: style.textSize, weight: .medium, design: style.fontDesign))
                         .multilineTextAlignment(style.textAlignment)
+                        .lineSpacing(style.textSize * 0.15)
                         .frame(maxWidth: .infinity, alignment: style.contentAlignment)
                         .foregroundStyle(Color(hex: style.textHex))
                         .padding(24)

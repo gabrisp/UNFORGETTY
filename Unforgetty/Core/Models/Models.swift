@@ -249,9 +249,6 @@ struct ActivityStyle: Codable, Hashable {
     var imageOffsetY: Double = 0
     /// Only used for `.music` content.
     var musicLayout = MusicLayout.disc
-    /// Whether the art spins — independent of shape (any layout can spin or stay still), editor
-    /// only (see rendering code for the platform constraint on why).
-    var musicSpins = true
     /// Independent of the card's global border — the music art can have its own outline/color.
     var musicBorderEnabled = false
     var musicBorderHex = "FFFFFF"
@@ -348,7 +345,7 @@ struct ActivityStyle: Codable, Hashable {
         }
     }
 
-    private enum CodingKeys: String, CodingKey { case backgroundHex, gradientStartHex, gradientEndHex, gradientKind, gradientAngle, gradientCenterX, gradientCenterY, backgroundImageData, backgroundIsCustomized, textHex, backgroundMode, font, textSize, alignment, verticalAlignment, borderHex, borderWidth, checklistScheme, imageInset, imageOffsetY, musicLayout, musicSpins, musicBorderEnabled, musicBorderHex, musicShowsTitle, musicShowsArtist, musicShowsAlbum }
+    private enum CodingKeys: String, CodingKey { case backgroundHex, gradientStartHex, gradientEndHex, gradientKind, gradientAngle, gradientCenterX, gradientCenterY, backgroundImageData, backgroundIsCustomized, textHex, backgroundMode, font, textSize, alignment, verticalAlignment, borderHex, borderWidth, checklistScheme, imageInset, imageOffsetY, musicLayout, musicBorderEnabled, musicBorderHex, musicShowsTitle, musicShowsArtist, musicShowsAlbum }
 
     var horizontalAlignment: HorizontalAlignment {
         switch alignment {
@@ -415,12 +412,41 @@ struct ActivityStyle: Codable, Hashable {
         imageInset = try container.decodeIfPresent(Double.self, forKey: .imageInset) ?? Self.defaultImageInset
         imageOffsetY = try container.decodeIfPresent(Double.self, forKey: .imageOffsetY) ?? 0
         musicLayout = try container.decodeIfPresent(MusicLayout.self, forKey: .musicLayout) ?? .disc
-        musicSpins = try container.decodeIfPresent(Bool.self, forKey: .musicSpins) ?? true
         musicBorderEnabled = try container.decodeIfPresent(Bool.self, forKey: .musicBorderEnabled) ?? false
         musicBorderHex = try container.decodeIfPresent(String.self, forKey: .musicBorderHex) ?? "FFFFFF"
         musicShowsTitle = try container.decodeIfPresent(Bool.self, forKey: .musicShowsTitle) ?? true
         musicShowsArtist = try container.decodeIfPresent(Bool.self, forKey: .musicShowsArtist) ?? true
         musicShowsAlbum = try container.decodeIfPresent(Bool.self, forKey: .musicShowsAlbum) ?? true
+    }
+}
+
+extension ActivityStyle {
+    /// A friend ping's style rides in `FriendActivitySnapshot` (the shared, push-transportable
+    /// shape) rather than as a real `ActivityStyle` — this bridges back so the received content
+    /// can be rendered/copied/re-edited with the exact same views as any local activity.
+    init(snapshot: FriendActivitySnapshot) {
+        self.init()
+        backgroundHex = snapshot.backgroundHex
+        backgroundMode = BackgroundMode(rawValue: snapshot.backgroundMode) ?? .plain
+        gradientStartHex = snapshot.gradientStartHex
+        gradientEndHex = snapshot.gradientEndHex
+        gradientKind = GradientKind(rawValue: snapshot.gradientKind) ?? .linear
+        gradientAngle = snapshot.gradientAngle
+        gradientCenterX = snapshot.gradientCenterX
+        gradientCenterY = snapshot.gradientCenterY
+        textHex = snapshot.textHex
+        font = FontChoice(rawValue: snapshot.font) ?? .rounded
+        textSize = snapshot.textSize
+        alignment = TextAlignmentChoice(rawValue: snapshot.alignment) ?? .leading
+        verticalAlignment = VerticalAlignmentChoice(rawValue: snapshot.verticalAlignment) ?? .center
+        borderHex = snapshot.borderHex
+        borderWidth = snapshot.borderWidth
+        musicLayout = MusicLayout(rawValue: snapshot.musicLayout) ?? .disc
+        musicBorderEnabled = snapshot.musicBorderEnabled
+        musicBorderHex = snapshot.musicBorderHex
+        musicShowsTitle = snapshot.musicShowsTitle
+        musicShowsArtist = snapshot.musicShowsArtist
+        musicShowsAlbum = snapshot.musicShowsAlbum
     }
 }
 
@@ -554,6 +580,25 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
             borderHex: style.borderHex,
             borderWidth: style.borderWidth
         )
+    }
+}
+
+extension LiveActivityDraft {
+    /// Reconstructs a local, editable draft from a friend's snapshot — used both to render a
+    /// received ping through the same views as any local activity (`ActivityPreviewView`) and to
+    /// seed a brand-new draft when the user chooses "re-edit" on one. `musicAlbumArtData` is left
+    /// nil: a snapshot never carries the raw bytes (too big for the APNs payload), only a URL.
+    init(snapshot: FriendActivitySnapshot) {
+        self.init()
+        kind = snapshot.kind == "music" ? .music : .note
+        body = snapshot.body
+        style = ActivityStyle(snapshot: snapshot)
+        musicTitle = snapshot.musicTitle ?? ""
+        musicArtist = snapshot.musicArtist ?? ""
+        musicAlbum = snapshot.musicAlbum ?? ""
+        musicSpotifyTrackID = snapshot.musicSpotifyTrackID
+        musicSpotifyURL = snapshot.musicSpotifyURL
+        musicAlbumArtURL = snapshot.musicAlbumArtURL
     }
 }
 

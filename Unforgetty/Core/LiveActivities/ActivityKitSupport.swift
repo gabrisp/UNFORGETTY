@@ -21,6 +21,45 @@ struct UnforgettyActivityAttributes: ActivityAttributes {
 enum LiveActivityController {
     private static var pushToStartTokenTask: Task<Void, Never>?
     private static let pushTokenKey = "liveactivity.pushToStartToken"
+    private static var friendPingUpdateTokenTask: Task<Void, Never>?
+    private static var trackedFriendPingIDs: Set<String> = []
+
+    /// Friend-ping activities arrive via push-to-start on the recipient's device, so `start(_:)`
+    /// below (used only for this device's own local schedules) never runs for them. Each running
+    /// activity's per-instance update token has to be captured separately from the device-wide
+    /// pushToStartToken — that one only lets a sender create new activities, never update one
+    /// that's already running. Covers both activities already running at launch and ones that
+    /// start while the app stays open.
+    static func observeFriendPingUpdateTokens() {
+        guard friendPingUpdateTokenTask == nil else { return }
+
+        friendPingUpdateTokenTask = Task {
+            guard #available(iOS 16.2, *) else { return }
+            for activity in Activity<UnforgettyActivityAttributes>.activities {
+                trackFriendPingUpdateToken(for: activity)
+            }
+            for await activity in Activity<UnforgettyActivityAttributes>.activityUpdates {
+                trackFriendPingUpdateToken(for: activity)
+            }
+        }
+    }
+
+    private static func trackFriendPingUpdateToken(for activity: Activity<UnforgettyActivityAttributes>) {
+        let notificationID = activity.attributes.notificationID
+        guard activity.content.state.fromUsername != nil, !trackedFriendPingIDs.contains(notificationID) else { return }
+        trackedFriendPingIDs.insert(notificationID)
+
+        Task {
+            for await token in activity.pushTokenUpdates {
+                let value = token.map { String(format: "%02x", $0) }.joined()
+                try? await SocialRepository.shared.registerActivityUpdateToken(
+                    notificationID: notificationID,
+                    activityUpdateToken: value,
+                    message: activity.content.state.message
+                )
+            }
+        }
+    }
 
     static func observePushToStartToken() {
         guard pushToStartTokenTask == nil else { return }
@@ -63,6 +102,14 @@ enum LiveActivityController {
         let staleDate = scheduled.autoEndDuration.map { Date.now.addingTimeInterval(min($0, Self.maxAutoEndDuration)) }
         let content = ActivityContent(state: UnforgettyActivityAttributes.ContentState(phase: "active", notificationID: scheduled.notificationID), staleDate: staleDate)
         let activity = try Activity.request(attributes: attributes, content: content, pushType: .token)
+        // Confirmed via device logs: the very first render can fire before the widget extension
+        // has picked up files just written to the App Group container — the write succeeds, but
+        // the first paint's read of it never even gets attempted. Force one more render shortly
+        // after so it's guaranteed to re-read with everything already in place.
+        Task {
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            await refresh(id: activity.id)
+        }
         return activity.id
     }
 
@@ -70,13 +117,21 @@ enum LiveActivityController {
     static let maxAutoEndDuration: TimeInterval = 8 * 3600
     static func end(id: String) async {
         guard let activity = Activity<UnforgettyActivityAttributes>.activities.first(where: { $0.id == id }) else { return }
-        await activity.end(ActivityContent(state: UnforgettyActivityAttributes.ContentState(phase: "ended", notificationID: activity.attributes.notificationID), staleDate: nil), dismissalPolicy: .default)
+        // `.default` only marks the activity "ended" and lets the system decide when to actually
+        // remove it from the Lock Screen — it can stay visible for up to 4 hours. `.immediate` is
+        // what makes a delete/kill actually disappear right away.
+        await activity.end(ActivityContent(state: UnforgettyActivityAttributes.ContentState(phase: "ended", notificationID: activity.attributes.notificationID), staleDate: nil), dismissalPolicy: .immediate)
     }
 
     /// The Live Activity's content lives in the shared App Group store, not in `ContentState`.
     /// Bumping `phase` just forces WidgetKit to re-render from the freshly saved content.
     static func refresh(id: String) async {
-        guard let activity = Activity<UnforgettyActivityAttributes>.activities.first(where: { $0.id == id }) else { return }
+        guard let activity = Activity<UnforgettyActivityAttributes>.activities.first(where: { $0.id == id }) else {
+            NSLog("Unforgetty LiveActivityController.refresh: no running activity found with id=%@ (total running=%d)", id, Activity<UnforgettyActivityAttributes>.activities.count)
+            return
+        }
+        NSLog("Unforgetty LiveActivityController.refresh: bumping phase for id=%@ notificationID=%@", id, activity.attributes.notificationID)
         await activity.update(ActivityContent(state: UnforgettyActivityAttributes.ContentState(phase: UUID().uuidString, notificationID: activity.attributes.notificationID), staleDate: nil))
+        NSLog("Unforgetty LiveActivityController.refresh: activity.update() returned for id=%@", id)
     }
 }

@@ -15,10 +15,8 @@ struct StyleEditorView<VM: DraftEditingViewModel>: View {
                 personalizationGroup {
                     musicLayoutPicker
 
-                    Toggle("Gira", isOn: $viewModel.draft.style.musicSpins)
-                        .padding(.top, 2)
-
                     Toggle("Border", isOn: $viewModel.draft.style.musicBorderEnabled)
+                        .padding(.top, 2)
 
                     if viewModel.draft.style.musicBorderEnabled {
                         settingsRow("Color del borde") {
@@ -171,7 +169,6 @@ struct StyleEditorView<VM: DraftEditingViewModel>: View {
         .sensoryFeedback(.selection, trigger: viewModel.draft.style.font)
         .sensoryFeedback(.selection, trigger: viewModel.draft.style.checklistScheme)
         .sensoryFeedback(.selection, trigger: viewModel.draft.style.musicLayout)
-        .sensoryFeedback(.selection, trigger: viewModel.draft.style.musicSpins)
         .sensoryFeedback(.selection, trigger: viewModel.draft.style.musicBorderEnabled)
         .sensoryFeedback(.selection, trigger: viewModel.draft.style.musicShowsTitle)
         .sensoryFeedback(.selection, trigger: viewModel.draft.style.musicShowsArtist)

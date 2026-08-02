@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct PaywallShowcaseCard: Identifiable {
     let id = UUID()
@@ -62,34 +65,40 @@ struct PaywallMarqueeShowcase: View {
     private let horizontalPadding: CGFloat = 16
     private let spacing: CGFloat = 14
 
-    var body: some View {
-        GeometryReader { geometry in
-            // Matches the real Live Activity's own dimensions (160pt tall, full screen width
-            // minus the standard 16pt side padding) instead of an arbitrary small card size.
-            let cardWidth = geometry.size.width - (horizontalPadding * 2)
+    // Reads the actual device screen width directly rather than a GeometryReader nested inside
+    // a parent that pads and then un-pads itself with a hardcoded negative value — that only
+    // works if the guess exactly matches the parent's real (system-default, not fixed) padding,
+    // which is fragile. This is exact regardless of what the parent around it does.
+    private var cardWidth: CGFloat {
+        #if canImport(UIKit)
+        UIScreen.main.bounds.width - (horizontalPadding * 2)
+        #else
+        400 - (horizontalPadding * 2)
+        #endif
+    }
 
-            VStack(spacing: spacing) {
-                MarqueeRow(
-                    cards: PaywallShowcase.cards,
-                    cardWidth: cardWidth,
-                    cardHeight: cardHeight,
-                    spacing: spacing,
-                    speed: 24,
-                    reversed: false,
-                    leadingPadding: 0
-                )
-                MarqueeRow(
-                    cards: Array(PaywallShowcase.cards.rotated(by: 5)),
-                    cardWidth: cardWidth,
-                    cardHeight: cardHeight,
-                    spacing: spacing,
-                    speed: 20,
-                    reversed: true,
-                    // Half a card-width (plus its spacing) so this row's cards sit centered on the
-                    // seam between two cards in the row above — a staggered, interlocking look.
-                    leadingPadding: (cardWidth + spacing) / 2
-                )
-            }
+    var body: some View {
+        VStack(spacing: spacing) {
+            MarqueeRow(
+                cards: PaywallShowcase.cards,
+                cardWidth: cardWidth,
+                cardHeight: cardHeight,
+                spacing: spacing,
+                speed: 24,
+                reversed: false,
+                leadingPadding: 0
+            )
+            MarqueeRow(
+                cards: Array(PaywallShowcase.cards.rotated(by: 5)),
+                cardWidth: cardWidth,
+                cardHeight: cardHeight,
+                spacing: spacing,
+                speed: 20,
+                reversed: true,
+                // Half a card-width (plus its spacing) so this row's cards sit centered on the
+                // seam between two cards in the row above — a staggered, interlocking look.
+                leadingPadding: (cardWidth + spacing) / 2
+            )
         }
         .frame(height: cardHeight * 2 + spacing)
         .mask {

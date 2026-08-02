@@ -44,6 +44,7 @@ struct LivePreviewView<VM: DraftEditingViewModel>: View {
                 TextField("Note", text: noteTextBinding, axis: .vertical)
                     .font(.system(size: viewModel.draft.style.textSize, weight: .medium, design: viewModel.draft.style.fontDesign))
                     .multilineTextAlignment(viewModel.draft.style.textAlignment)
+                    .lineSpacing(viewModel.draft.style.textSize * 0.15)
                     .lineLimit(1...maxInputLines)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: viewModel.draft.style.contentAlignment)
@@ -213,8 +214,6 @@ struct LivePreviewView<VM: DraftEditingViewModel>: View {
 
     private var editableMusicContent: some View {
         HStack(alignment: viewModel.draft.style.swiftUIVerticalAlignment, spacing: 16) {
-            musicArtView
-
             if viewModel.draft.style.musicShowsTitle || viewModel.draft.style.musicShowsArtist || viewModel.draft.style.musicShowsAlbum {
                 VStack(alignment: .leading, spacing: 4) {
                     if viewModel.draft.style.musicShowsTitle {
@@ -242,6 +241,8 @@ struct LivePreviewView<VM: DraftEditingViewModel>: View {
                     onPickSong?()
                 }
             }
+
+            musicArtView
         }
         .frame(maxWidth: .infinity, alignment: viewModel.draft.style.contentAlignment)
     }
@@ -265,20 +266,7 @@ struct LivePreviewView<VM: DraftEditingViewModel>: View {
                 }
             }
 
-        Group {
-            if viewModel.draft.style.musicSpins {
-                // Time-based rather than a discrete withAnimation(repeatForever) state jump — the
-                // latter can visibly freeze whenever the view re-renders for an unrelated reason
-                // (e.g. picking a new song swaps the art image), since that re-render can interrupt
-                // the running transaction. Deriving the angle from wall-clock time every frame can't
-                // "stop": it has no state to lose. Same pattern already used for the paywall marquee.
-                TimelineView(.animation) { context in
-                    clippedArt.rotationEffect(.degrees(spinAngle(at: context.date)))
-                }
-            } else {
-                clippedArt
-            }
-        }
+        clippedArt
         // White outline only while the song-picker sheet is actually open, not just because this
         // content happens to be music — it marks "you're editing this right now", not "this is editable".
         .overlay {
@@ -306,12 +294,6 @@ struct LivePreviewView<VM: DraftEditingViewModel>: View {
                     .foregroundStyle(Color(hex: viewModel.draft.style.textHex).opacity(0.55))
             }
         }
-    }
-
-    private func spinAngle(at date: Date) -> Double {
-        let duration = 8.0
-        let progress = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: duration) / duration
-        return progress * 360
     }
 
     private var musicAlbumArtImage: Image? {

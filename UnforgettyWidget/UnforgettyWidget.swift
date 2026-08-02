@@ -221,6 +221,7 @@ private struct FriendSnapshotView: View {
             Text(noteText)
                 .font(.system(size: style.textSize, weight: .medium, design: style.fontDesign))
                 .multilineTextAlignment(style.textAlignment)
+                .lineSpacing(style.textSize * 0.15)
                 .lineLimit(6)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: style.contentAlignment)
@@ -398,6 +399,11 @@ private struct FriendMusicSnapshotView: View {
             await MainActor.run {
                 albumArtData = data
             }
+            // A Live Activity view's @State update alone isn't a reliable repaint signal here —
+            // this download can finish after the widget process's initial render already
+            // completed (confirmed pattern: see LiveActivityController.start's equivalent race for
+            // locally-started activities). Force an explicit re-render once the art is on disk.
+            await WidgetLiveActivityRefresher.refresh(notificationID: notificationID)
         }
     }
 }
@@ -421,7 +427,9 @@ private struct LockScreenActivityView: View {
     let notificationID: String
     let state: UnforgettyActivityAttributes.ContentState
     @Environment(\.isLuminanceReduced) private var isLuminanceReduced
-    private var draft: WidgetDraft? { WidgetContentStore.draft(for: notificationID) }
+    private var draft: WidgetDraft? {
+        WidgetContentStore.draft(for: notificationID)
+    }
     var body: some View {
         if let draft {
             interactiveActivityContent(for: draft)
@@ -454,6 +462,7 @@ private struct LockScreenActivityView: View {
                 Text(noteText(for: draft))
                     .font(.system(size: draft.style.textSize, weight: .medium, design: draft.style.fontDesign))
                     .multilineTextAlignment(draft.style.textAlignment)
+                    .lineSpacing(draft.style.textSize * 0.15)
                     .lineLimit(6)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: draft.style.contentAlignment)
@@ -554,28 +563,6 @@ private struct LockScreenActivityView: View {
     // content (WidgetKit only re-renders on real content-state changes, not a persistent loop).
     private func musicContent(for draft: WidgetDraft) -> some View {
         HStack(alignment: draft.style.swiftUIVerticalAlignment, spacing: 16) {
-            Group {
-                if let image = widgetContentImage(from: draft.musicAlbumArtData) {
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    ZStack {
-                        Color.secondary.opacity(0.12)
-                        Image(systemName: "music.note")
-                            .font(.title2.weight(.semibold))
-                            .foregroundStyle(Color(hex: draft.style.textHex).opacity(0.55))
-                    }
-                }
-            }
-            .frame(width: 112, height: 112)
-            .clipShape(musicClipShape(for: draft.style.musicLayout))
-            .overlay {
-                if draft.style.musicBorderEnabled == true {
-                    musicClipShape(for: draft.style.musicLayout).stroke(Color(hex: draft.style.musicBorderHex ?? "FFFFFF"), lineWidth: 3)
-                }
-            }
-
             if draft.style.musicShowsTitle != false || draft.style.musicShowsArtist != false || draft.style.musicShowsAlbum != false {
                 VStack(alignment: .leading, spacing: 4) {
                     if draft.style.musicShowsTitle != false {
@@ -595,6 +582,28 @@ private struct LockScreenActivityView: View {
                             .foregroundStyle(Color(hex: draft.style.textHex).opacity(0.5))
                             .lineLimit(1)
                     }
+                }
+            }
+
+            Group {
+                if let image = widgetContentImage(from: draft.musicAlbumArtData) {
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    ZStack {
+                        Color.secondary.opacity(0.12)
+                        Image(systemName: "music.note")
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(Color(hex: draft.style.textHex).opacity(0.55))
+                    }
+                }
+            }
+            .frame(width: 112, height: 112)
+            .clipShape(musicClipShape(for: draft.style.musicLayout))
+            .overlay {
+                if draft.style.musicBorderEnabled == true {
+                    musicClipShape(for: draft.style.musicLayout).stroke(Color(hex: draft.style.musicBorderHex ?? "FFFFFF"), lineWidth: 3)
                 }
             }
         }

@@ -53,6 +53,8 @@ async function handleAction(databases, payload, log) {
       return updatePushToken(databases, payload);
     case "sendToFriend":
       return sendToFriend(databases, payload, log);
+    case "registerActivityUpdateToken":
+      return registerActivityUpdateToken(databases, payload);
     default:
       throw new Error("unknown_action");
   }
@@ -260,27 +262,86 @@ function sanitizedSnapshot(raw) {
   };
 }
 
+async function findActivityUpdateToken(databases, notificationID, recipientUserID) {
+  const result = await databases.listDocuments(
+    process.env.SCHEDULER_DATABASE_ID,
+    process.env.LIVE_ACTIVITY_TOKENS_COLLECTION_ID,
+    [Query.equal("notificationID", [notificationID]), Query.equal("recipientUserID", [recipientUserID]), Query.limit(1)]
+  );
+  return result.documents[0] ?? null;
+}
+
+async function registerActivityUpdateToken(databases, payload) {
+  if (typeof payload.notificationID !== "string" || payload.notificationID.length === 0) throw new Error("missing_notificationID");
+  if (typeof payload.activityUpdateToken !== "string" || payload.activityUpdateToken.length === 0) throw new Error("missing_activityUpdateToken");
+  const lastMessage = typeof payload.message === "string" ? payload.message.trim().slice(0, 120) : "";
+
+  const existing = await findActivityUpdateToken(databases, payload.notificationID, payload.userID);
+  if (existing) {
+    await databases.updateDocument(process.env.SCHEDULER_DATABASE_ID, process.env.LIVE_ACTIVITY_TOKENS_COLLECTION_ID, existing.$id, {
+      activityUpdateToken: payload.activityUpdateToken,
+      lastMessage,
+      updatedAt: new Date().toISOString()
+    });
+    return { registered: true };
+  }
+
+  await databases.createDocument(process.env.SCHEDULER_DATABASE_ID, process.env.LIVE_ACTIVITY_TOKENS_COLLECTION_ID, ID.unique(), {
+    notificationID: payload.notificationID,
+    recipientUserID: payload.userID,
+    activityUpdateToken: payload.activityUpdateToken,
+    lastMessage,
+    updatedAt: new Date().toISOString()
+  });
+  return { registered: true };
+}
+
 async function sendToFriend(databases, payload, log) {
   const toUsername = normalizedUsername(payload.toUsername);
   if (typeof payload.fromUsername !== "string") throw new Error("missing_fromUsername");
   if (typeof payload.message !== "string" || payload.message.trim().length === 0) throw new Error("missing_message");
+  if (typeof payload.notificationID !== "string" || payload.notificationID.length === 0) throw new Error("missing_notificationID");
   const snapshot = sanitizedSnapshot(payload.snapshot);
+  const message = payload.message.trim().slice(0, 120);
 
   const target = await databases.getDocument(process.env.SCHEDULER_DATABASE_ID, process.env.PROFILES_COLLECTION_ID, toUsername).catch(() => null);
   if (!target) throw new Error("user_not_found");
 
   const friendship = await existingFriendship(databases, payload.userID, target.userID);
   if (!friendship || friendship.status !== "accepted") throw new Error("not_friends");
+
+  const updateRecord = await findActivityUpdateToken(databases, payload.notificationID, target.userID);
+
+  if (updateRecord) {
+    const messageChanged = updateRecord.lastMessage !== message;
+    await sendLiveActivityUpdate({
+      activityUpdateToken: updateRecord.activityUpdateToken,
+      notificationID: payload.notificationID,
+      fromUsername: payload.fromUsername.toLowerCase(),
+      message,
+      messageChanged,
+      snapshot
+    });
+    await databases.updateDocument(process.env.SCHEDULER_DATABASE_ID, process.env.LIVE_ACTIVITY_TOKENS_COLLECTION_ID, updateRecord.$id, {
+      lastMessage: message,
+      updatedAt: new Date().toISOString()
+    });
+
+    log(`Updated existing friend ping live activity for ${toUsername}.`);
+    return { status: "updated" };
+  }
+
   if (!target.pushToStartToken) throw new Error("friend_has_no_device");
 
   await sendLiveActivityPing({
     deviceToken: target.pushToStartToken,
+    notificationID: payload.notificationID,
     fromUsername: payload.fromUsername.toLowerCase(),
-    message: payload.message.trim().slice(0, 120),
+    message,
     snapshot
   });
 
-  log(`Sent a friend ping to ${toUsername}.`);
+  log(`Sent a new friend ping to ${toUsername}.`);
   return { status: "sent" };
 }
 
@@ -318,12 +379,9 @@ function parsePayload(req) {
 
 // --- Raw APNs push-to-start, mirroring activity-scheduler's sendLiveActivityStart. ---
 
-async function sendLiveActivityPing({ deviceToken, fromUsername, message, snapshot }) {
+async function sendLiveActivityPing({ deviceToken, notificationID, fromUsername, message, snapshot }) {
   const topic = process.env.APNS_TOPIC;
   if (!topic) throw new Error("missing_apns_topic");
-  const environment = process.env.APNS_ENVIRONMENT === "production" ? "production" : "sandbox";
-  const authority = environment === "production" ? "https://api.push.apple.com" : "https://api.sandbox.push.apple.com";
-  const notificationID = `friend-${crypto.randomUUID()}`;
 
   const payload = JSON.stringify({
     aps: {
@@ -337,6 +395,38 @@ async function sendLiveActivityPing({ deviceToken, fromUsername, message, snapsh
     }
   });
 
+  const { status, body } = await postApnsRequest(deviceToken, payload);
+  if (status !== 200) throw new Error(`apns_${status}:${body}`);
+}
+
+// Targets a specific already-running Live Activity via its per-activity update push token
+// (distinct from the device-wide pushToStartToken used above to create new activities). Reuses
+// the same notificationID the activity was originally created with, since that's what
+// live_activity_tokens is keyed on. When the message hasn't changed since last send, the alert
+// is omitted so this lands as a silent background content update instead of a fresh banner.
+async function sendLiveActivityUpdate({ activityUpdateToken, notificationID, fromUsername, message, messageChanged, snapshot }) {
+  const topic = process.env.APNS_TOPIC;
+  if (!topic) throw new Error("missing_apns_topic");
+
+  const aps = {
+    timestamp: Math.floor(Date.now() / 1000),
+    event: "update",
+    "content-state": { phase: "active", notificationID, fromUsername, message, friendSnapshot: snapshot },
+    "stale-date": Math.floor(Date.now() / 1000) + 3600
+  };
+  if (messageChanged) {
+    aps.alert = { title: `@${fromUsername}`, body: message };
+  }
+
+  const { status, body } = await postApnsRequest(activityUpdateToken, JSON.stringify({ aps }));
+  if (status !== 200) throw new Error(`apns_${status}:${body}`);
+}
+
+async function postApnsRequest(deviceToken, payload) {
+  const topic = process.env.APNS_TOPIC;
+  const environment = process.env.APNS_ENVIRONMENT === "production" ? "production" : "sandbox";
+  const authority = environment === "production" ? "https://api.push.apple.com" : "https://api.sandbox.push.apple.com";
+
   const client = http2.connect(authority);
   try {
     const req = client.request({
@@ -349,7 +439,7 @@ async function sendLiveActivityPing({ deviceToken, fromUsername, message, snapsh
       "apns-expiration": "0"
     });
 
-    const { status, body } = await new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       let status = 0;
       let body = "";
       req.on("response", (headers) => {
@@ -363,8 +453,6 @@ async function sendLiveActivityPing({ deviceToken, fromUsername, message, snapsh
       req.on("error", reject);
       req.end(payload);
     });
-
-    if (status !== 200) throw new Error(`apns_${status}:${body}`);
   } finally {
     client.close();
   }
