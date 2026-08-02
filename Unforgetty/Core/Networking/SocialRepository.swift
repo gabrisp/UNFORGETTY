@@ -104,6 +104,7 @@ actor SocialRepository {
                 "textSize": snapshot.textSize,
                 "alignment": snapshot.alignment,
                 "verticalAlignment": snapshot.verticalAlignment,
+                "lineSpacingMultiplier": snapshot.lineSpacingMultiplier,
                 "borderHex": snapshot.borderHex,
                 "borderWidth": snapshot.borderWidth,
                 "musicTitle": snapshot.musicTitle ?? "",

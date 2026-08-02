@@ -108,6 +108,38 @@ enum LiveActivityController {
         return pushToStartToken()
     }
 
+    /// Fallback path for when the recipient has no `pushToStartToken` registered (see
+    /// AppwriteFunctions/social's sendFriendPingWakePush) — the backend instead sends a plain
+    /// silent push to this device's already-registered general push target, which wakes the app
+    /// and hands this off to start the activity itself, in-process, exactly like push-to-start
+    /// would have done remotely. Called from UnforgettyAppDelegate's
+    /// didReceiveRemoteNotification. Requesting with `pushType: .token` (not nil) still lets
+    /// observeFriendPingUpdateTokens() pick up this activity's per-instance update token for
+    /// later resends, same as any other friend-ping activity.
+    static func startFriendPing(from payload: [AnyHashable: Any]) -> Bool {
+        guard
+            let info = payload["startFriendPing"] as? [String: Any],
+            let notificationID = info["notificationID"] as? String,
+            let fromUsername = info["fromUsername"] as? String,
+            let snapshotDict = info["snapshot"] as? [String: Any],
+            let snapshotData = try? JSONSerialization.data(withJSONObject: snapshotDict),
+            let snapshot = try? JSONDecoder().decode(FriendActivitySnapshot.self, from: snapshotData)
+        else { return false }
+        let message = info["message"] as? String
+
+        let attributes = UnforgettyActivityAttributes(notificationID: notificationID)
+        let content = ActivityContent(
+            state: UnforgettyActivityAttributes.ContentState(phase: "active", notificationID: notificationID, fromUsername: fromUsername, message: message, friendSnapshot: snapshot),
+            staleDate: Date.now.addingTimeInterval(3600)
+        )
+        do {
+            _ = try Activity.request(attributes: attributes, content: content, pushType: .token)
+            return true
+        } catch {
+            return false
+        }
+    }
+
     static func start(_ scheduled: ScheduledActivity) async throws -> String {
         let attributes = UnforgettyActivityAttributes(notificationID: scheduled.notificationID)
         let staleDate = scheduled.autoEndDuration.map { Date.now.addingTimeInterval(min($0, Self.maxAutoEndDuration)) }

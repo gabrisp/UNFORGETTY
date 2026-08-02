@@ -1,4 +1,4 @@
-import { Client, Databases, ID, Query } from "node-appwrite";
+import { Client, Databases, ID, Query, Users } from "node-appwrite";
 import crypto from "node:crypto";
 import http2 from "node:http2";
 
@@ -21,8 +21,9 @@ export default async ({ req, res, log, error }) => {
     if (!apiKey) throw new Error("missing_api_key");
     const client = new Client().setEndpoint(APPWRITE_ENDPOINT).setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID).setKey(apiKey);
     const databases = new Databases(client);
+    const users = new Users(client);
 
-    const result = await handleAction(databases, payload, log);
+    const result = await handleAction(databases, users, payload, log);
     return res.json({ ok: true, ...result });
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : "unknown_error";
@@ -31,7 +32,7 @@ export default async ({ req, res, log, error }) => {
   }
 };
 
-async function handleAction(databases, payload, log) {
+async function handleAction(databases, users, payload, log) {
   switch (payload.action) {
     case "claimUsername":
       return claimUsername(databases, payload);
@@ -52,7 +53,7 @@ async function handleAction(databases, payload, log) {
     case "updatePushToken":
       return updatePushToken(databases, payload);
     case "sendToFriend":
-      return sendToFriend(databases, payload, log);
+      return sendToFriend(databases, users, payload, log);
     case "registerActivityUpdateToken":
       return registerActivityUpdateToken(databases, payload);
     default:
@@ -245,6 +246,11 @@ function sanitizedSnapshot(raw) {
     textSize: number(raw.textSize, 40),
     alignment: ["leading", "center", "trailing"].includes(raw.alignment) ? raw.alignment : "leading",
     verticalAlignment: ["top", "center", "bottom"].includes(raw.verticalAlignment) ? raw.verticalAlignment : "center",
+    // FriendActivitySnapshot's synthesized Decodable requires every non-optional key to be
+    // present — a Swift `= 0.15` default only applies to the memberwise initializer, it is NOT a
+    // fallback for a missing JSON key, so omitting this made the system's own content-state
+    // decode throw silently on the recipient's device (push accepted, activity never appears).
+    lineSpacingMultiplier: number(raw.lineSpacingMultiplier, 0.15),
     borderHex: string(raw.borderHex, "FFFFFF", 8),
     borderWidth: number(raw.borderWidth, 0),
     musicTitle: string(raw.musicTitle, "", 120),
@@ -297,7 +303,7 @@ async function registerActivityUpdateToken(databases, payload) {
   return { registered: true };
 }
 
-async function sendToFriend(databases, payload, log) {
+async function sendToFriend(databases, users, payload, log) {
   const toUsername = normalizedUsername(payload.toUsername);
   if (typeof payload.fromUsername !== "string") throw new Error("missing_fromUsername");
   if (typeof payload.message !== "string" || payload.message.trim().length === 0) throw new Error("missing_message");
@@ -332,18 +338,50 @@ async function sendToFriend(databases, payload, log) {
     return { status: "updated" };
   }
 
-  if (!target.pushToStartToken) throw new Error("friend_has_no_device");
+  if (target.pushToStartToken) {
+    await sendLiveActivityPing({
+      deviceToken: target.pushToStartToken,
+      notificationID: payload.notificationID,
+      fromUsername: payload.fromUsername.toLowerCase(),
+      message,
+      snapshot
+    });
 
-  await sendLiveActivityPing({
-    deviceToken: target.pushToStartToken,
+    log(`Sent a new friend ping to ${toUsername} via push-to-start.`);
+    return { status: "sent" };
+  }
+
+  // pushToStartToken is the only way to start a Live Activity truly remotely (no app process
+  // involved) — but it's finicky to get registered (see updatePushToken's doc comment) and
+  // requires the recipient to have the separate, easy-to-miss "Live Activities" toggle enabled,
+  // not just Notifications. A regular push target (registered the moment notifications are
+  // granted, at account/targets/push — see register-push-target) is far more reliably present.
+  // Fall back to it: a silent background push wakes the app, which starts the Live Activity
+  // itself, in-process — no push-to-start token required for that path at all.
+  const pushTarget = await findPushTarget(users, target.userID);
+  if (!pushTarget) throw new Error("friend_has_no_device");
+
+  await sendFriendPingWakePush({
+    deviceToken: pushTarget,
     notificationID: payload.notificationID,
     fromUsername: payload.fromUsername.toLowerCase(),
     message,
     snapshot
   });
 
-  log(`Sent a new friend ping to ${toUsername}.`);
+  log(`Sent a new friend ping to ${toUsername} via background wake push.`);
   return { status: "sent" };
+}
+
+/// The `Users` API lists every target (push/email/sms) ever registered for an account — filters
+/// down to a still-valid APNs push target, preferring the most recently created if there's more
+/// than one (e.g. a reinstall left a stale one behind).
+async function findPushTarget(users, userID) {
+  const result = await users.listTargets(userID, [Query.equal("providerType", ["push"])]).catch(() => null);
+  const valid = (result?.targets ?? []).filter((t) => !t.expired && typeof t.identifier === "string" && t.identifier.length > 0);
+  if (valid.length === 0) return null;
+  valid.sort((a, b) => new Date(b.$createdAt).getTime() - new Date(a.$createdAt).getTime());
+  return valid[0].identifier;
 }
 
 function parsePayload(req) {
@@ -423,10 +461,31 @@ async function sendLiveActivityUpdate({ activityUpdateToken, notificationID, fro
   if (status !== 200) throw new Error(`apns_${status}:${body}`);
 }
 
-async function postApnsRequest(deviceToken, payload) {
+// Wakes the recipient's app via a plain silent push (their already-registered general push
+// target, not a Live-Activity-specific one) and hands it everything it needs to start the
+// activity itself, in-process — see UnforgettyAppDelegate's
+// application(_:didReceiveRemoteNotification:fetchCompletionHandler:) for the client side.
+// content-available pushes are lower-priority/best-effort at the OS level (can be delayed or
+// dropped, e.g. under Low Power Mode or if the app was force-quit), unlike push-to-start which
+// Apple treats as higher-priority specifically for this use case — this is the fallback for when
+// push-to-start isn't available, not a full replacement for it.
+async function sendFriendPingWakePush({ deviceToken, notificationID, fromUsername, message, snapshot }) {
+  const payload = JSON.stringify({
+    aps: { "content-available": 1 },
+    startFriendPing: { notificationID, fromUsername, message, snapshot }
+  });
+
+  const { status, body } = await postApnsRequest(deviceToken, payload, { pushType: "background" });
+  if (status !== 200) throw new Error(`apns_${status}:${body}`);
+}
+
+async function postApnsRequest(deviceToken, payload, { pushType = "liveactivity" } = {}) {
   const topic = process.env.APNS_TOPIC;
   const environment = process.env.APNS_ENVIRONMENT === "production" ? "production" : "sandbox";
   const authority = environment === "production" ? "https://api.push.apple.com" : "https://api.sandbox.push.apple.com";
+  // A background push's topic is the bare bundle ID — only Live Activity pushes use the
+  // `.push-type.liveactivity` suffixed topic.
+  const apnsTopic = pushType === "liveactivity" ? `${topic}.push-type.liveactivity` : topic;
 
   const client = http2.connect(authority);
   try {
@@ -434,9 +493,9 @@ async function postApnsRequest(deviceToken, payload) {
       ":method": "POST",
       ":path": `/3/device/${deviceToken}`,
       authorization: `bearer ${buildApnsJwt()}`,
-      "apns-topic": `${topic}.push-type.liveactivity`,
-      "apns-push-type": "liveactivity",
-      "apns-priority": "10",
+      "apns-topic": apnsTopic,
+      "apns-push-type": pushType,
+      "apns-priority": pushType === "background" ? "5" : "10",
       "apns-expiration": "0"
     });
 

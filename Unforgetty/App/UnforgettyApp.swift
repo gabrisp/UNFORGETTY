@@ -44,6 +44,25 @@ final class UnforgettyAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifi
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         NSLog("Unforgetty: APNs registration FAILED: %@", error.localizedDescription)
     }
+
+    /// Fallback friend-ping delivery for when the recipient has no pushToStartToken registered
+    /// (see AppwriteFunctions/social's sendFriendPingWakePush) — a plain silent push wakes the
+    /// app here, and this starts the Live Activity locally instead of Apple's push-to-start doing
+    /// it remotely. Only handles this one custom payload shape; anything else reports `.noData`.
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        guard userInfo["startFriendPing"] != nil else {
+            completionHandler(.noData)
+            return
+        }
+        Task { @MainActor in
+            let started = LiveActivityController.startFriendPing(from: userInfo)
+            completionHandler(started ? .newData : .failed)
+        }
+    }
 }
 
 /// Live Activity buttons that need to open a different app (Spotify, Shortcuts, ...) can't do it

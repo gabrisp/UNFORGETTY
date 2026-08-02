@@ -94,7 +94,7 @@ struct CreateActivityV2View: View {
                             Haptics.light()
                             dismissKeyboard()
                         } label: {
-                            Image(systemName: "chevron.compact.down.fill")
+                            Image(systemName: "keyboard.chevron.compact.down")
                         }
                     } else if showsEditingToolbarButtons {
                         activityKindMenu
@@ -1187,7 +1187,7 @@ private struct LiveActionItemEditSheet: View {
                             triggerFeedback()
 	                            focusedField = nil
 	                        } label: {
-                            Image(systemName: "chevron.compact.down.fill")
+                            Image(systemName: "ckeyboard.chevron.compact.down")
                         }
                         .padding(.vertical, 8)
                     }
