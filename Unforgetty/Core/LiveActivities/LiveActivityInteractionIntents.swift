@@ -233,6 +233,15 @@ nonisolated enum LiveActionURLBuilder {
                 queryItems.append(URLQueryItem(name: "text", value: shortcutInput))
             }
 
+            // iOS has no way to run a user's Shortcut without the Shortcuts app itself briefly
+            // taking over to interpret it — these x-callback-url params are the closest available
+            // mitigation: they make it hand focus straight back to Unforgetty the moment the
+            // shortcut finishes (or is cancelled/errors), instead of leaving the user stranded in
+            // the Shortcuts app.
+            queryItems.append(URLQueryItem(name: "x-success", value: "unforgetty://shortcut-completed"))
+            queryItems.append(URLQueryItem(name: "x-cancel", value: "unforgetty://shortcut-completed"))
+            queryItems.append(URLQueryItem(name: "x-error", value: "unforgetty://shortcut-completed"))
+
             components.queryItems = queryItems
             return components.url
         case "openApp":
