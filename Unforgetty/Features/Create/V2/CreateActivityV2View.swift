@@ -15,7 +15,10 @@ struct CreateActivityV2View: View {
     @State private var selectedActivity: ScheduledActivity?
     @State private var presentedSheetActivity: ScheduledActivity?
     @State private var isKeyboardVisible = false
-    @State private var cardHeights: [UUID: CGFloat] = [:]
+    // Only the currently-selected card's height is ever needed (for the edit sheet's
+    // presentationDetents) — a single scalar set once at selection time, not a dictionary written
+    // continuously by every card's geometry reads. See CardAnimationSlot.
+    @State private var selectedCardHeight: CGFloat = 160
     @State private var info = Info()
     @State private var editedLiveAction: LiveActionSelection?
     @State private var isPickingFriends = false
@@ -32,7 +35,7 @@ struct CreateActivityV2View: View {
     @State private var cardSource: CardSource = .own
     @State private var receivedPings: [ReceivedFriendPing] = []
     @State private var selectedFriendPing: ReceivedFriendPing?
-    @State private var friendCardHeights: [String: CGFloat] = [:]
+    @State private var selectedFriendCardHeight: CGFloat = 160
 
     var body: some View {
         NavigationStack {
@@ -190,10 +193,15 @@ struct CreateActivityV2View: View {
 //                    }
                 }
             }
-            .onScrollGeometryChange(for: CGFloat.self) {
-                $0.contentOffset.y + $0.contentInsets.top
+            // `onScrollGeometryChange`'s `action` only fires when the *transformed* value changes —
+            // transforming straight to the boolean this is actually used for (instead of the raw
+            // offset) means it fires once per threshold crossing instead of on every scroll frame,
+            // which otherwise reassigned the whole `info` struct — and therefore invalidated this
+            // entire view — continuously while scrolling.
+            .onScrollGeometryChange(for: Bool.self) {
+                ($0.contentOffset.y + $0.contentInsets.top) > 1
             } action: { _, newValue in
-                info.scrollOffset = newValue
+                info.isScrolledPastTop = newValue
             }
             .onGeometryChange(for: CGFloat.self) {
                 $0.frame(in: .global).minY
@@ -239,7 +247,7 @@ struct CreateActivityV2View: View {
         .sheet(item: $presentedSheetActivity) { activity in
             let spacing: CGFloat = 20
             let isSafeAreaiPhone = info.safeArea.bottom > 0
-            let minSheetHeight = info.containerSize.height - info.minY - (selectedActivitySlotHeight + spacing)
+            let minSheetHeight = info.containerSize.height - info.minY - (selectedActivityHeight + spacing)
             let maxSheetHeight = info.containerSize.height - info.minY + (isSafeAreaiPhone ? 15 : 10)
 
             Group {
@@ -331,46 +339,27 @@ struct CreateActivityV2View: View {
     @ViewBuilder
     private func SavedLiveActivityCardView(activity: ScheduledActivity) -> some View {
         let isCurrent = activity.id == selectedActivityID
-        let currentIndex = store.liveActivityCards.firstIndex(where: { $0.id == activity.id }) ?? 0
-        let selectedActivityIndex = store.liveActivityCards.firstIndex(where: { $0.id == selectedActivityID }) ?? 0
 
-        cardContent(activity: activity, isCurrent: isCurrent)
-            .onGeometryChange(for: CGFloat.self) {
-                $0.size.height
-            } action: { newValue in
-                cardHeights[activity.id] = newValue
-            }
-            .contentShape(.rect)
-            .onTapGesture {
-                withAnimation(animation) {
-                    select(activity)
+        CardAnimationSlot(
+            isCurrent: isCurrent,
+            isAnySelected: isActivitySelected,
+            containerSize: info.containerSize,
+            animation: animation,
+            onSelect: { height in select(activity, height: height) },
+            onCurrentHeightChange: { height in selectedCardHeight = height }
+        ) {
+            cardContent(activity: activity, isCurrent: isCurrent)
+        }
+        .contextMenu {
+            if !isActivitySelected {
+                Button(role: .destructive) {
+                    deleteActivity(activity)
+                } label: {
+                    Label("Delete", systemImage: "trash")
                 }
+                .disabled(!canDelete(activity))
             }
-            .contextMenu {
-                if !isActivitySelected {
-                    Button(role: .destructive) {
-                        deleteActivity(activity)
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                    .disabled(!canDelete(activity))
-                }
-            }
-            .visualEffect { [info, isActivitySelected] content, proxy in
-                let rect = proxy.frame(in: .scrollView)
-                let bounds = info.containerSize
-                let centeredSelectedOffset = selectedActivityTopOffset - rect.minY
-                let hiddenCardOffset = bounds.height - rect.minY
-                let pushOffset = isCurrent ? centeredSelectedOffset : hiddenCardOffset
-
-                return content
-                    .scaleEffect(isActivitySelected && !isCurrent ? 0.95 : 1, anchor: .top)
-                    .offset(y: isActivitySelected ? pushOffset : 0)
-                    .opacity(isActivitySelected && !isCurrent ? 0 : 1)
-            }
-            .allowsHitTesting(isActivitySelected ? isCurrent : true)
-            .disabled(isActivitySelected && !isCurrent)
-            .padding(.top, cardTopPadding(activity: activity, index: currentIndex))
+        }
     }
 
     @ViewBuilder
@@ -394,12 +383,13 @@ struct CreateActivityV2View: View {
         }
     }
 
-    private func select(_ activity: ScheduledActivity) {
+    private func select(_ activity: ScheduledActivity, height: CGFloat = 160) {
         undoStack.removeAll()
         redoStack.removeAll()
         editViewModel.load(activity)
         normalizeActivityTitle()
         selectedActivity = editViewModel.activity
+        selectedCardHeight = height
         if !isKeyboardVisible {
             presentedSheetActivity = editViewModel.activity
         }
@@ -425,41 +415,28 @@ struct CreateActivityV2View: View {
     private func ReceivedPingCardView(ping: ReceivedFriendPing) -> some View {
         let isCurrent = ping.notificationID == selectedFriendPing?.notificationID
 
-        friendCardContent(ping: ping, isCurrent: isCurrent)
-            .onGeometryChange(for: CGFloat.self) {
-                $0.size.height
-            } action: { newValue in
-                friendCardHeights[ping.notificationID] = newValue
-            }
-            .contentShape(.rect)
-            .onTapGesture {
-                withAnimation(animation) {
-                    selectedFriendPing = ping
+        CardAnimationSlot(
+            isCurrent: isCurrent,
+            isAnySelected: isFriendPingSelected,
+            containerSize: info.containerSize,
+            animation: animation,
+            onSelect: { height in
+                selectedFriendPing = ping
+                selectedFriendCardHeight = height
+            },
+            onCurrentHeightChange: { height in selectedFriendCardHeight = height }
+        ) {
+            friendCardContent(ping: ping, isCurrent: isCurrent)
+        }
+        .contextMenu {
+            if !isFriendPingSelected {
+                Button(role: .destructive) {
+                    deleteFriendPing(ping)
+                } label: {
+                    Label("Delete", systemImage: "trash")
                 }
             }
-            .contextMenu {
-                if !isFriendPingSelected {
-                    Button(role: .destructive) {
-                        deleteFriendPing(ping)
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
-            }
-            .visualEffect { [info, isFriendPingSelected] content, proxy in
-                let rect = proxy.frame(in: .scrollView)
-                let bounds = info.containerSize
-                let centeredSelectedOffset = -rect.minY
-                let hiddenCardOffset = bounds.height - rect.minY
-                let pushOffset = isCurrent ? centeredSelectedOffset : hiddenCardOffset
-
-                return content
-                    .scaleEffect(isFriendPingSelected && !isCurrent ? 0.95 : 1, anchor: .top)
-                    .offset(y: isFriendPingSelected ? pushOffset : 0)
-                    .opacity(isFriendPingSelected && !isCurrent ? 0 : 1)
-            }
-            .allowsHitTesting(isFriendPingSelected ? isCurrent : true)
-            .disabled(isFriendPingSelected && !isCurrent)
+        }
     }
 
     @ViewBuilder
@@ -568,7 +545,6 @@ struct CreateActivityV2View: View {
             }
         }
         WidgetContentStore.deleteReceivedFriendPing(notificationID: ping.notificationID)
-        friendCardHeights.removeValue(forKey: ping.notificationID)
         loadReceivedPings()
     }
 
@@ -764,7 +740,7 @@ struct CreateActivityV2View: View {
 
     private var successZoneHeight: CGFloat {
         let spacing: CGFloat = 20
-        return max(160, info.containerSize.height - info.minY - (selectedActivitySlotHeight + spacing))
+        return max(160, info.containerSize.height - info.minY - (selectedActivityHeight + spacing))
     }
 
     private func successBottomBanner(_ message: String) -> some View {
@@ -880,7 +856,6 @@ struct CreateActivityV2View: View {
             await MainActor.run {
                 withAnimation(animation) {
                     store.deleteLiveActivityCard(id: activity.id)
-                    cardHeights.removeValue(forKey: activity.id)
                 }
             }
         }
@@ -904,7 +879,7 @@ struct CreateActivityV2View: View {
     }
 
     private var isNavigationTitleHidden: Bool {
-        info.scrollOffset > 1 || isActivitySelected || isFriendPingSelected
+        info.isScrolledPastTop || isActivitySelected || isFriendPingSelected
     }
 
     private var isActivitySelected: Bool {
@@ -942,33 +917,8 @@ struct CreateActivityV2View: View {
     }
 
     private var selectedActivityHeight: CGFloat {
-        guard let selectedActivityID else { return 160 }
-        return cardHeights[selectedActivityID] ?? 160
+        selectedCardHeight
     }
-
-    private var selectedActivitySlotHeight: CGFloat {
-        selectedActivityHeight
-    }
-
-    private var selectedActivityTopOffset: CGFloat {
-        max(0, (selectedActivitySlotHeight - selectedActivityHeight) / 2)
-    }
-
-    private func cardTopPadding(activity: ScheduledActivity, index: Int) -> CGFloat {
-        // guard index > 0, !isActivitySelected else { return 0 }
-        // let height = cardHeights[activity.id] ?? 220
-        // let previousActivity = store.liveActivityCards[index - 1]
-        // let previousHeight = cardHeights[previousActivity.id] ?? 220
-        // let overlap = height * cardOverlapRatio(for: height)
-        // let cappedOverlap = min(overlap, previousHeight * 0.55)
-        return 0
-    }
-
-    // private func cardOverlapRatio(for height: CGFloat) -> CGFloat {
-    //     if height < 150 { return 0.1 }
-    //     if height > 260 { return 0.2 }
-    //     return 0.38
-    // }
 
     @ViewBuilder
     private var screenBackground: some View {
@@ -1083,7 +1033,7 @@ struct CreateActivityV2View: View {
     }
 
     private struct Info {
-        var scrollOffset: CGFloat = 0
+        var isScrolledPastTop = false
         var containerSize: CGSize = .zero
         var safeArea: EdgeInsets = .init()
         var minY: CGFloat = 0
@@ -1092,6 +1042,61 @@ struct CreateActivityV2View: View {
 
 private struct LiveActionSelection: Identifiable, Hashable {
     let id: UUID
+}
+
+/// Wraps a card's tap-to-center animation + hit-testing/visibility math as a genuinely separate
+/// `View` identity per card (SwiftUI gives each `ForEach` row its own instance) — its own measured
+/// height lives in LOCAL `@State` here instead of a `[ID: CGFloat]` dictionary on the parent.
+/// Previously every card wrote into that shared dictionary on every scroll/layout pass, and because
+/// `CreateActivityV2View`'s cards were plain functions (no view-identity boundary), each write
+/// invalidated and re-diffed the *entire* parent body — every other card, the whole toolbar, on
+/// every frame. Only the currently-selected card's height is ever actually needed by the parent
+/// (for the edit sheet's `presentationDetents`), so that's handed up once, at selection time, via
+/// `onSelect`, rather than continuously.
+private struct CardAnimationSlot<Content: View>: View {
+    let isCurrent: Bool
+    let isAnySelected: Bool
+    let containerSize: CGSize
+    let animation: Animation
+    let onSelect: (CGFloat) -> Void
+    // The selected card's content (e.g. a note's text) can keep changing height while it's open —
+    // typing more text, adding checklist items — and the presenting sheet needs to track that
+    // reactively, same as before this was split out. Only wired up while `isCurrent`, so the other
+    // N-1 cards in the grid still never write anything up to the parent on every layout pass.
+    let onCurrentHeightChange: (CGFloat) -> Void
+    @ViewBuilder let content: () -> Content
+    @State private var measuredHeight: CGFloat = 160
+
+    var body: some View {
+        content()
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.height
+            } action: { newValue in
+                measuredHeight = newValue
+                if isCurrent {
+                    onCurrentHeightChange(newValue)
+                }
+            }
+            .contentShape(.rect)
+            .onTapGesture {
+                withAnimation(animation) {
+                    onSelect(measuredHeight)
+                }
+            }
+            .visualEffect { [isCurrent, isAnySelected, containerSize] content, proxy in
+                let rect = proxy.frame(in: .scrollView)
+                let centeredOffset = -rect.minY
+                let hiddenOffset = containerSize.height - rect.minY
+                let pushOffset = isCurrent ? centeredOffset : hiddenOffset
+
+                return content
+                    .scaleEffect(isAnySelected && !isCurrent ? 0.95 : 1, anchor: .top)
+                    .offset(y: isAnySelected ? pushOffset : 0)
+                    .opacity(isAnySelected && !isCurrent ? 0 : 1)
+            }
+            .allowsHitTesting(isAnySelected ? isCurrent : true)
+            .disabled(isAnySelected && !isCurrent)
+    }
 }
 
 private enum ActivityStatusPillKind {
