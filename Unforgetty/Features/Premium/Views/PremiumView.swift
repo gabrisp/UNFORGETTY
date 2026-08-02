@@ -5,11 +5,17 @@ struct PremiumView: View {
     @EnvironmentObject private var store: ActivityStore
     @State private var selectedProductID: String?
     @State private var isPurchasing = false
-    @State private var overlayHeight: CGFloat = 260
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .bottom) {
+            // A genuine sibling layout, not an overlapping one — the footer used to be layered on
+            // top of the scroll content via ZStack(alignment: .bottom), which needed a manually
+            // measured Color.clear spacer at the bottom of the scroll content just to keep the
+            // footer from covering it. Any mismatch between that guessed/measured height and the
+            // real content let the scroll content visibly run into/behind the footer. A plain
+            // VStack sidesteps the whole problem: the footer takes exactly the space it needs, and
+            // the ScrollView gets whatever's left above it — no overlap possible, no spacer needed.
+            VStack(spacing: 0) {
                 ScrollView(.vertical) {
                     VStack(spacing: 20) {
                         PaywallMarqueeShowcase()
@@ -30,12 +36,6 @@ struct PremiumView: View {
                             .foregroundStyle(.indigo)
                         Text(store.isPremium ? "Premium activo" : "Unforgetty Premium").font(.title.bold())
                         Text("Actividades y programaciones ilimitadas.").multilineTextAlignment(.center).foregroundStyle(.secondary)
-
-                        // Reserves room so the fixed bottom overlay never covers the last bit of
-                        // scrollable content — measured from the overlay itself, not guessed.
-                        if !store.isPremium {
-                            Color.clear.frame(height: overlayHeight)
-                        }
                     }
                     .padding()
                 }
@@ -113,7 +113,6 @@ struct PremiumView: View {
         .padding(.bottom, 8)
         .background(.ultraThinMaterial)
         .overlay(alignment: .top) { Divider() }
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { overlayHeight = $0 }
     }
 
     /// Falls back to placeholder cards (no real price/trial text, still purchasable by product ID)
