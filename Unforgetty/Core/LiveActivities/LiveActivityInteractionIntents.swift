@@ -4,6 +4,9 @@ import EventKit
 import Foundation
 import SwiftUI
 import WidgetKit
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct WidgetChecklistItem: Codable, Identifiable {
     var id: UUID
@@ -314,6 +317,31 @@ nonisolated enum SharedImageStore {
         save(nil, name: "\(notificationID)-music.jpg")
     }
 }
+
+/// Background/album-art images are stored as raw `Data` on the draft and decoded into `UIImage`
+/// via a plain computed property wherever they're rendered — which SwiftUI re-evaluates on every
+/// single body pass, including every frame of a `withAnimation` transition (the card-open/close
+/// animation runs at up to 60fps). Redecoding a JPEG from bytes on every one of those frames is
+/// real, easily-felt CPU cost and the direct cause of the animation getting laggier/glitchier the
+/// more images have been opened in a session. Keyed by the raw bytes themselves (`NSData` hashes/
+/// equates by content) rather than any app-specific ID, so it works for every caller — the app's
+/// own drafts, the widget's, and a friend snapshot's downloaded art — without extra plumbing.
+/// `NSCache` evicts under memory pressure on its own, so this never needs manual invalidation.
+#if canImport(UIKit)
+nonisolated enum ImageDecodeCache {
+    private static let cache = NSCache<NSData, UIImage>()
+
+    static func image(for data: Data) -> UIImage? {
+        let key = data as NSData
+        if let cached = cache.object(forKey: key) {
+            return cached
+        }
+        guard let decoded = UIImage(data: data) else { return nil }
+        cache.setObject(decoded, forKey: key, cost: data.count)
+        return decoded
+    }
+}
+#endif
 
 nonisolated enum WidgetContentStore {
     static let defaults = UserDefaults(suiteName: "group.com.gabrisp.Unforgetty") ?? .standard

@@ -101,7 +101,7 @@ extension View {
 
     private func backgroundImage(from data: Data?) -> Image? {
         #if canImport(UIKit)
-        guard let data, let uiImage = UIImage(data: data) else { return nil }
+        guard let data, let uiImage = ImageDecodeCache.image(for: data) else { return nil }
         return Image(uiImage: uiImage)
         #else
         return nil

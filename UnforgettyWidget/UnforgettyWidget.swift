@@ -286,7 +286,7 @@ private struct FriendMusicSnapshotView: View {
 
     private var albumArtImage: Image? {
         #if canImport(UIKit)
-        guard let albumArtData, let uiImage = UIImage(data: albumArtData) else { return nil }
+        guard let albumArtData, let uiImage = ImageDecodeCache.image(for: albumArtData) else { return nil }
         return Image(uiImage: uiImage)
         #else
         return nil
@@ -567,7 +567,7 @@ private struct LockScreenActivityView: View {
 
     private func widgetContentImage(from data: Data?) -> Image? {
         #if canImport(UIKit)
-        guard let data, let uiImage = UIImage(data: data) else { return nil }
+        guard let data, let uiImage = ImageDecodeCache.image(for: data) else { return nil }
         return Image(uiImage: uiImage)
         #else
         return nil
@@ -993,7 +993,7 @@ private extension View {
 
     private func widgetBackgroundImage(from data: Data?) -> Image? {
         #if canImport(UIKit)
-        guard let data, let uiImage = UIImage(data: data) else { return nil }
+        guard let data, let uiImage = ImageDecodeCache.image(for: data) else { return nil }
         return Image(uiImage: uiImage)
         #else
         return nil

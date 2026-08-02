@@ -205,7 +205,7 @@ struct LivePreviewView<VM: DraftEditingViewModel>: View {
 
     private var contentImage: Image? {
         #if canImport(UIKit)
-        guard let data = viewModel.draft.style.backgroundImageData, let uiImage = UIImage(data: data) else { return nil }
+        guard let data = viewModel.draft.style.backgroundImageData, let uiImage = ImageDecodeCache.image(for: data) else { return nil }
         return Image(uiImage: uiImage)
         #else
         return nil
@@ -307,7 +307,7 @@ struct LivePreviewView<VM: DraftEditingViewModel>: View {
 
     private var musicAlbumArtImage: Image? {
         #if canImport(UIKit)
-        guard let data = viewModel.draft.musicAlbumArtData, let uiImage = UIImage(data: data) else { return nil }
+        guard let data = viewModel.draft.musicAlbumArtData, let uiImage = ImageDecodeCache.image(for: data) else { return nil }
         return Image(uiImage: uiImage)
         #else
         return nil

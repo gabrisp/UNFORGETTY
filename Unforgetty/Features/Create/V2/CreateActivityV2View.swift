@@ -365,6 +365,8 @@ struct CreateActivityV2View: View {
     @ViewBuilder
     private func cardContent(activity: ScheduledActivity, isCurrent: Bool) -> some View {
         if isCurrent {
+            // Interactive (text input, live-action buttons) — must stay real SwiftUI views, not a
+            // rasterized layer, or touch/keyboard input on the card being edited would break.
             SelectedActivityPreview(
                 viewModel: editViewModel,
                 selectedLiveActionID: editedLiveAction?.id,
@@ -379,7 +381,13 @@ struct CreateActivityV2View: View {
                 showsStatusPill: !isEditingSubsheet
             )
         } else {
+            // Purely a static preview — flattening it into one rasterized layer means the
+            // scale/offset/opacity transform animating it away only has to move a single texture
+            // each frame, instead of recompositing its text/gradient/border/shadow stack every
+            // frame. This is where most of the animation's actual cost was: every OTHER card in
+            // the grid (not just the one being opened) animates simultaneously on every selection.
             ActivityPreviewView(draft: activity.draft)
+                .drawingGroup()
         }
     }
 
@@ -467,6 +475,9 @@ struct CreateActivityV2View: View {
                     .foregroundStyle(.secondary)
             }
         }
+        // Never interactive (no text input, no buttons — the whole card's tap target is handled
+        // outside this content by CardAnimationSlot), so this is always safe to flatten.
+        .drawingGroup()
     }
 
     private static let friendDateFormatter: DateFormatter = {

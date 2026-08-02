@@ -153,7 +153,7 @@ struct ActivityContentView: View {
 
     private var musicAlbumArtImage: Image? {
         #if canImport(UIKit)
-        guard let data = draft.musicAlbumArtData, let uiImage = UIImage(data: data) else { return nil }
+        guard let data = draft.musicAlbumArtData, let uiImage = ImageDecodeCache.image(for: data) else { return nil }
         return Image(uiImage: uiImage)
         #else
         return nil
@@ -162,7 +162,7 @@ struct ActivityContentView: View {
 
     private var contentImage: Image? {
         #if canImport(UIKit)
-        guard let data = draft.style.backgroundImageData, let uiImage = UIImage(data: data) else { return nil }
+        guard let data = draft.style.backgroundImageData, let uiImage = ImageDecodeCache.image(for: data) else { return nil }
         return Image(uiImage: uiImage)
         #else
         return nil
