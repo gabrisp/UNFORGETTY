@@ -17,6 +17,14 @@ final class SocialSettingsModel: ObservableObject {
         username = try? await SocialRepository.shared.myUsername()
         friends = (try? await SocialRepository.shared.listFriends()) ?? []
         pendingRequests = (try? await SocialRepository.shared.listPendingRequests()) ?? []
+        // Safety net for the same race claimUsername() closes below: if ActivityKit ever handed
+        // us a push-to-start token before this device had a Profile document yet (or any other
+        // ordering hiccup), the backend silently drops it — there's no error to react to, so the
+        // only way to recover is to just keep re-sending the locally cached token whenever we
+        // know a username now exists.
+        if username != nil, let cachedToken = LiveActivityController.pushToStartToken() {
+            try? await SocialRepository.shared.updatePushToken(cachedToken)
+        }
     }
 
     func claimUsername() async {
@@ -31,6 +39,13 @@ final class SocialSettingsModel: ObservableObject {
             usernameInput = ""
             isEditingUsername = false
             statusMessage = "Guardado como @\(claimed)."
+            // updatePushToken silently no-ops server-side if this device's Profile didn't exist
+            // yet — which, until the line above, it never did. Re-send the token we already have
+            // cached locally (ActivityKit's pushToStartTokenUpdates may have fired long before
+            // this claim, or may not fire again for a long time) now that the profile is real.
+            if let cachedToken = LiveActivityController.pushToStartToken() {
+                try? await SocialRepository.shared.updatePushToken(cachedToken)
+            }
         } catch {
             isStatusError = true
             statusMessage = error.localizedDescription
