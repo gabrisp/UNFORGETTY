@@ -37,6 +37,23 @@ final class AppFlowViewModel: ObservableObject {
         await store.preparePurchases(appUserID: ckUserID)
         destination = UserDefaults.standard.bool(forKey: "hasFinishedOnboarding") ? .root : .onboarding
         NSLog("Unforgetty: bootstrap finished, destination=%@", String(describing: destination))
+        resyncPushToStartTokenIfNeeded()
+    }
+
+    /// Closes the same gap SocialSettingsModel's refresh()/claimUsername() close, but without
+    /// requiring the user to specifically visit Settings first — this fires on every app launch.
+    /// See updatePushToken's doc comment in AppwriteFunctions/social: the backend silently drops
+    /// a push-to-start token if it arrives before this device's Profile document exists (e.g.
+    /// before onboarding claims a username), so it has to be re-sent once we know a username is
+    /// actually in place, from whatever launch first has both a cached token and a claimed
+    /// username — not just from the Settings screen specifically.
+    private func resyncPushToStartTokenIfNeeded() {
+        guard let cachedToken = LiveActivityController.pushToStartToken() else { return }
+        Task {
+            guard let username = try? await SocialRepository.shared.myUsername(), username != nil else { return }
+            try? await SocialRepository.shared.updatePushToken(cachedToken)
+            print("Unforgetty: bootstrap re-synced cached pushToStartToken for username=\(username ?? "?")")
+        }
     }
 
     func showRoot() { destination = .root }

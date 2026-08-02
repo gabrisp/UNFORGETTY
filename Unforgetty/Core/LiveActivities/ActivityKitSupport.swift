@@ -69,7 +69,7 @@ enum LiveActivityController {
             for await token in Activity<UnforgettyActivityAttributes>.pushToStartTokenUpdates {
                 let value = token.map { String(format: "%02x", $0) }.joined()
                 UserDefaults(suiteName: "group.com.gabrisp.Unforgetty")?.set(value, forKey: pushTokenKey)
-                NSLog("Unforgetty: got pushToStartTokenUpdates, syncing to backend")
+                print("Unforgetty: got pushToStartTokenUpdates, syncing to backend")
                 // So friends can ping this device even if it never registers a schedule of its own.
                 // Was previously a silent `try?` — the backend no-ops this (no error) if this
                 // device's Profile document doesn't exist yet (e.g. this token can arrive before
@@ -78,9 +78,9 @@ enum LiveActivityController {
                 // safety net was added. Logging the outcome so a future silent-drop is visible.
                 do {
                     try await SocialRepository.shared.updatePushToken(value)
-                    NSLog("Unforgetty: updatePushToken succeeded")
+                    print("Unforgetty: updatePushToken succeeded")
                 } catch {
-                    NSLog("Unforgetty: updatePushToken FAILED: %@", (error as? LocalizedError)?.errorDescription ?? "\(error)")
+                    print("Unforgetty: updatePushToken FAILED: \(error)")
                 }
             }
         }
