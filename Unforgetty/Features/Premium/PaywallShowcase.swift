@@ -202,6 +202,10 @@ private struct MarqueeRow: View {
                 }
             }
             .padding(.leading, leadingPadding)
+            // Headroom for the checklist cards' "TAP ME!" badge, which pops up above the card's
+            // own top edge — without this, the row's own `.clipped()` below (needed to hide the
+            // scroll wraparound seams) was cutting the badge off before it could be seen.
+            .padding(.top, 26)
             .offset(x: offset)
             .fixedSize(horizontal: false, vertical: true)
         }
