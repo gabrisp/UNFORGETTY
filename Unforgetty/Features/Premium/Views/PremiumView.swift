@@ -42,18 +42,9 @@ struct PremiumView: View {
 
                 if !store.isPremium {
                     bottomPurchaseOverlay
-                        // ZStack does NOT clip its children by default — if anything inside the
-                        // footer ever reports an ideal width bigger than the screen (a button's
-                        // intrinsic content size, an un-truncated label, ...), `.frame(maxWidth:
-                        // .infinity)` alone does not cap that; it only ALLOWS growth up to that
-                        // amount, it doesn't shrink an oversized child back down. `.clipped()` is
-                        // what actually enforces "never wider than my own bounds," regardless of
-                        // what any descendant demands.
-                        .clipped()
                 }
             }
             .frame(maxWidth: .infinity)
-            .clipped()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {

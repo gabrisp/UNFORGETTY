@@ -128,9 +128,12 @@ enum PaywallShowcase {
 
 struct PaywallMarqueeShowcase: View {
     private let spacing: CGFloat = 14
+    // Separate from `spacing` (card-to-card, within a row) — this is specifically the gap
+    // between the three stacked marquee rows.
+    private let rowSpacing: CGFloat = 4
 
     var body: some View {
-        VStack(spacing: spacing) {
+        VStack(spacing: rowSpacing) {
             MarqueeRow(
                 cards: PaywallShowcase.cardsRowOne,
                 spacing: spacing,
@@ -185,6 +188,12 @@ private struct MarqueeRow: View {
     let reversed: Bool
     let leadingPadding: CGFloat
 
+    // Headroom for the checklist cards' "TAP ME!" badge, which pops up above the card's own top
+    // edge — without this, the row's own `.clipped()` below (needed to hide the scroll wraparound
+    // seams) was cutting the badge off before it could be seen.
+    private let badgeHeadroom: CGFloat = 26
+    private var rowHeight: CGFloat { PaywallShowcaseCardView.cardHeight + badgeHeadroom }
+
     @State private var setWidth: CGFloat = 0
 
     var body: some View {
@@ -202,15 +211,18 @@ private struct MarqueeRow: View {
                 }
             }
             .padding(.leading, leadingPadding)
-            // Headroom for the checklist cards' "TAP ME!" badge, which pops up above the card's
-            // own top edge — without this, the row's own `.clipped()` below (needed to hide the
-            // scroll wraparound seams) was cutting the badge off before it could be seen.
-            .padding(.top, 26)
+            .padding(.top, badgeHeadroom)
             .offset(x: offset)
-            .fixedSize(horizontal: false, vertical: true)
         }
+        // Card height is a fixed constant (see PaywallShowcaseCardView), so the row's height can
+        // be too — no need to size it dynamically off content that's inside the `TimelineView`
+        // closure. That closure re-evaluates on every display refresh (60Hz+) to drive the scroll
+        // offset; letting SwiftUI re-measure an ideal *height* from content re-rendering that
+        // often was making the enclosing ScrollView's content size unstable frame-to-frame,
+        // which read as jittery/overscrolling even though nothing about the height actually
+        // changes. A hard `.frame(height:)` outside the TimelineView removes that entirely.
+        .frame(height: rowHeight, alignment: .top)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
         .clipped()
     }
 
@@ -224,6 +236,8 @@ private struct MarqueeRow: View {
 }
 
 private struct PaywallShowcaseCardView: View {
+    static let cardHeight: CGFloat = 160
+
     let card: PaywallShowcaseCard
     @State private var draft: LiveActivityDraft
     @State private var showsTapHint = false
@@ -248,7 +262,7 @@ private struct PaywallShowcaseCardView: View {
         // showcase reads as "this is literally what your Live Activity looks like."
         .fixedSize(horizontal: true, vertical: false)
         .padding(14)
-        .frame(height: 160)
+        .frame(height: Self.cardHeight)
         .activityCardBackground(style: draft.style, kind: draft.kind, cornerRadius: 20)
         .overlay(alignment: .top) {
             if isInteractive {
@@ -257,10 +271,14 @@ private struct PaywallShowcaseCardView: View {
         }
         .onAppear {
             guard isInteractive else { return }
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.55).delay(0.7)) {
+            // Randomized per instance so the several checklist cards in the marquee (three
+            // duplicated copies each, across three rows) don't all pop their badge at once —
+            // staggered, it reads as "cards do this," not as a single jarring flash.
+            let appearDelay = Double.random(in: 0.4...2.6)
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.55).delay(appearDelay)) {
                 showsTapHint = true
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.2) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + appearDelay + 2.5) {
                 withAnimation(.easeOut(duration: 0.35)) {
                     showsTapHint = false
                 }
