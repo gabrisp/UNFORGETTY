@@ -237,6 +237,11 @@ struct ActivityStyle: Codable, Hashable {
     var textSize: Double = Self.defaultTextSize
     var alignment = TextAlignmentChoice.leading
     var verticalAlignment = VerticalAlignmentChoice.center
+    /// Multiplier of `textSize` used as `.lineSpacing(...)` for multi-line note text — kept
+    /// relative to text size (not an absolute point value) so it scales sensibly across the whole
+    /// size range instead of looking cramped at 18pt or excessive at 44pt.
+    static let defaultLineSpacingMultiplier: Double = 0.15
+    var lineSpacingMultiplier: Double = Self.defaultLineSpacingMultiplier
     var borderHex = "FFFFFF"
     var borderWidth: Double = 0
     var checklistScheme = ChecklistScheme.circleCheck
@@ -257,6 +262,14 @@ struct ActivityStyle: Codable, Hashable {
     var musicShowsTitle = true
     var musicShowsArtist = true
     var musicShowsAlbum = true
+    /// Which side of the card the album art sits on, relative to the title/artist/album text.
+    var musicArtPosition = MusicArtPosition.trailing
+    enum MusicArtPosition: String, Codable, CaseIterable, Identifiable {
+        case leading, trailing
+
+        var id: Self { self }
+        var title: String { self == .leading ? "Left" : "Right" }
+    }
     enum MusicLayout: String, Codable, CaseIterable, Identifiable {
         case disc, square, heart, diamond, star
 
@@ -345,7 +358,7 @@ struct ActivityStyle: Codable, Hashable {
         }
     }
 
-    private enum CodingKeys: String, CodingKey { case backgroundHex, gradientStartHex, gradientEndHex, gradientKind, gradientAngle, gradientCenterX, gradientCenterY, backgroundImageData, backgroundIsCustomized, textHex, backgroundMode, font, textSize, alignment, verticalAlignment, borderHex, borderWidth, checklistScheme, imageInset, imageOffsetY, musicLayout, musicBorderEnabled, musicBorderHex, musicShowsTitle, musicShowsArtist, musicShowsAlbum }
+    private enum CodingKeys: String, CodingKey { case backgroundHex, gradientStartHex, gradientEndHex, gradientKind, gradientAngle, gradientCenterX, gradientCenterY, backgroundImageData, backgroundIsCustomized, textHex, backgroundMode, font, textSize, alignment, verticalAlignment, lineSpacingMultiplier, borderHex, borderWidth, checklistScheme, imageInset, imageOffsetY, musicLayout, musicBorderEnabled, musicBorderHex, musicShowsTitle, musicShowsArtist, musicShowsAlbum, musicArtPosition }
 
     var horizontalAlignment: HorizontalAlignment {
         switch alignment {
@@ -406,6 +419,7 @@ struct ActivityStyle: Codable, Hashable {
         textSize = min(Self.maximumTextSize, max(Self.minimumTextSize, decodedTextSize))
         alignment = try container.decodeIfPresent(TextAlignmentChoice.self, forKey: .alignment) ?? .leading
         verticalAlignment = try container.decodeIfPresent(VerticalAlignmentChoice.self, forKey: .verticalAlignment) ?? .center
+        lineSpacingMultiplier = try container.decodeIfPresent(Double.self, forKey: .lineSpacingMultiplier) ?? Self.defaultLineSpacingMultiplier
         borderHex = try container.decodeIfPresent(String.self, forKey: .borderHex) ?? "FFFFFF"
         borderWidth = try container.decodeIfPresent(Double.self, forKey: .borderWidth) ?? 0
         checklistScheme = try container.decodeIfPresent(ChecklistScheme.self, forKey: .checklistScheme) ?? .circleCheck
@@ -417,6 +431,7 @@ struct ActivityStyle: Codable, Hashable {
         musicShowsTitle = try container.decodeIfPresent(Bool.self, forKey: .musicShowsTitle) ?? true
         musicShowsArtist = try container.decodeIfPresent(Bool.self, forKey: .musicShowsArtist) ?? true
         musicShowsAlbum = try container.decodeIfPresent(Bool.self, forKey: .musicShowsAlbum) ?? true
+        musicArtPosition = try container.decodeIfPresent(MusicArtPosition.self, forKey: .musicArtPosition) ?? .trailing
     }
 }
 
@@ -439,6 +454,7 @@ extension ActivityStyle {
         textSize = snapshot.textSize
         alignment = TextAlignmentChoice(rawValue: snapshot.alignment) ?? .leading
         verticalAlignment = VerticalAlignmentChoice(rawValue: snapshot.verticalAlignment) ?? .center
+        lineSpacingMultiplier = snapshot.lineSpacingMultiplier
         borderHex = snapshot.borderHex
         borderWidth = snapshot.borderWidth
         musicLayout = MusicLayout(rawValue: snapshot.musicLayout) ?? .disc
@@ -447,6 +463,7 @@ extension ActivityStyle {
         musicShowsTitle = snapshot.musicShowsTitle
         musicShowsArtist = snapshot.musicShowsArtist
         musicShowsAlbum = snapshot.musicShowsAlbum
+        musicArtPosition = MusicArtPosition(rawValue: snapshot.musicArtPosition) ?? .trailing
     }
 }
 
@@ -546,6 +563,7 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
                 textSize: style.textSize,
                 alignment: style.alignment.rawValue,
                 verticalAlignment: style.verticalAlignment.rawValue,
+                lineSpacingMultiplier: style.lineSpacingMultiplier,
                 borderHex: style.borderHex,
                 borderWidth: style.borderWidth,
                 musicTitle: musicTitle,
@@ -559,7 +577,8 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
                 musicBorderHex: style.musicBorderHex,
                 musicShowsTitle: style.musicShowsTitle,
                 musicShowsArtist: style.musicShowsArtist,
-                musicShowsAlbum: style.musicShowsAlbum
+                musicShowsAlbum: style.musicShowsAlbum,
+                musicArtPosition: style.musicArtPosition.rawValue
             )
         }
         return FriendActivitySnapshot(
@@ -577,6 +596,7 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
             textSize: style.textSize,
             alignment: style.alignment.rawValue,
             verticalAlignment: style.verticalAlignment.rawValue,
+            lineSpacingMultiplier: style.lineSpacingMultiplier,
             borderHex: style.borderHex,
             borderWidth: style.borderWidth
         )

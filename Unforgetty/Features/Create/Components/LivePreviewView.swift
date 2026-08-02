@@ -44,7 +44,7 @@ struct LivePreviewView<VM: DraftEditingViewModel>: View {
                 TextField("Note", text: noteTextBinding, axis: .vertical)
                     .font(.system(size: viewModel.draft.style.textSize, weight: .medium, design: viewModel.draft.style.fontDesign))
                     .multilineTextAlignment(viewModel.draft.style.textAlignment)
-                    .lineSpacing(viewModel.draft.style.textSize * 0.15)
+                    .lineSpacing(viewModel.draft.style.textSize * viewModel.draft.style.lineSpacingMultiplier)
                     .lineLimit(1...maxInputLines)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: viewModel.draft.style.contentAlignment)
@@ -214,37 +214,46 @@ struct LivePreviewView<VM: DraftEditingViewModel>: View {
 
     private var editableMusicContent: some View {
         HStack(alignment: viewModel.draft.style.swiftUIVerticalAlignment, spacing: 16) {
-            if viewModel.draft.style.musicShowsTitle || viewModel.draft.style.musicShowsArtist || viewModel.draft.style.musicShowsAlbum {
-                VStack(alignment: .leading, spacing: 4) {
-                    if viewModel.draft.style.musicShowsTitle {
-                        Text(viewModel.draft.musicTitle.isEmpty ? "Choose a song" : viewModel.draft.musicTitle)
-                            .font(.system(size: viewModel.draft.style.textSize * 0.55, weight: .semibold, design: viewModel.draft.style.fontDesign))
-                            .lineLimit(1)
-                    }
-
-                    if viewModel.draft.style.musicShowsArtist, !viewModel.draft.musicArtist.isEmpty {
-                        Text(viewModel.draft.musicArtist)
-                            .font(.system(size: viewModel.draft.style.textSize * 0.4, design: viewModel.draft.style.fontDesign))
-                            .foregroundStyle(Color(hex: viewModel.draft.style.textHex).opacity(0.7))
-                            .lineLimit(1)
-                    }
-
-                    if viewModel.draft.style.musicShowsAlbum, !viewModel.draft.musicAlbum.isEmpty {
-                        Text(viewModel.draft.musicAlbum)
-                            .font(.system(size: viewModel.draft.style.textSize * 0.34, design: viewModel.draft.style.fontDesign))
-                            .foregroundStyle(Color(hex: viewModel.draft.style.textHex).opacity(0.5))
-                            .lineLimit(1)
-                    }
-                }
-                .contentShape(.rect)
-                .onTapGesture {
-                    onPickSong?()
-                }
+            if viewModel.draft.style.musicArtPosition == .leading {
+                musicArtView
+                musicTextView
+            } else {
+                musicTextView
+                musicArtView
             }
-
-            musicArtView
         }
         .frame(maxWidth: .infinity, alignment: viewModel.draft.style.contentAlignment)
+    }
+
+    @ViewBuilder
+    private var musicTextView: some View {
+        if viewModel.draft.style.musicShowsTitle || viewModel.draft.style.musicShowsArtist || viewModel.draft.style.musicShowsAlbum {
+            VStack(alignment: .leading, spacing: 4) {
+                if viewModel.draft.style.musicShowsTitle {
+                    Text(viewModel.draft.musicTitle.isEmpty ? "Choose a song" : viewModel.draft.musicTitle)
+                        .font(.system(size: viewModel.draft.style.textSize * 0.55, weight: .semibold, design: viewModel.draft.style.fontDesign))
+                        .lineLimit(1)
+                }
+
+                if viewModel.draft.style.musicShowsArtist, !viewModel.draft.musicArtist.isEmpty {
+                    Text(viewModel.draft.musicArtist)
+                        .font(.system(size: viewModel.draft.style.textSize * 0.4, design: viewModel.draft.style.fontDesign))
+                        .foregroundStyle(Color(hex: viewModel.draft.style.textHex).opacity(0.7))
+                        .lineLimit(1)
+                }
+
+                if viewModel.draft.style.musicShowsAlbum, !viewModel.draft.musicAlbum.isEmpty {
+                    Text(viewModel.draft.musicAlbum)
+                        .font(.system(size: viewModel.draft.style.textSize * 0.34, design: viewModel.draft.style.fontDesign))
+                        .foregroundStyle(Color(hex: viewModel.draft.style.textHex).opacity(0.5))
+                        .lineLimit(1)
+                }
+            }
+            .contentShape(.rect)
+            .onTapGesture {
+                onPickSong?()
+            }
+        }
     }
 
     @ViewBuilder

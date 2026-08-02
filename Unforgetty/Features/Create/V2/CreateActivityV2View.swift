@@ -1,7 +1,10 @@
 import SwiftUI
+import ActivityKit
 #if canImport(UIKit)
 import UIKit
 #endif
+
+private enum CardSource { case own, friends }
 
 struct CreateActivityV2View: View {
     @Binding var progress: CGFloat
@@ -22,19 +25,33 @@ struct CreateActivityV2View: View {
     @State private var isApplyingHistory = false
     @State private var isShowingSettings = false
     @State private var successMessage: String?
+    // Friend pings are browsed in this SAME screen/NavigationStack — only the grid's data source
+    // switches, via the toolbar's Stack/Friend menu — rather than navigating to a separate screen,
+    // so the card-open animation (built around this view's own `info`/height-tracking state) never
+    // has to be reproduced or reconciled across two different view hierarchies.
+    @State private var cardSource: CardSource = .own
+    @State private var receivedPings: [ReceivedFriendPing] = []
+    @State private var selectedFriendPing: ReceivedFriendPing?
+    @State private var friendCardHeights: [String: CGFloat] = [:]
 
     var body: some View {
         NavigationStack {
             ScrollView(.vertical) {
                 LazyVStack(spacing: 12) {
-                    ForEach(store.liveActivityCards) { activity in
-                        SavedLiveActivityCardView(activity: activity)
+                    if cardSource == .own {
+                        ForEach(store.liveActivityCards) { activity in
+                            SavedLiveActivityCardView(activity: activity)
+                        }
+                    } else {
+                        ForEach(receivedPings) { ping in
+                            ReceivedPingCardView(ping: ping)
+                        }
                     }
                 }
             }
             .scrollIndicators(.hidden)
             .safeAreaPadding(15)
-            .scrollDisabled(isActivitySelected)
+            .scrollDisabled(isActivitySelected || isFriendPingSelected)
             .navigationTitle(isNavigationTitleHidden ? "" : "Unforgetty")
             .toolbarTitleDisplayMode(.inlineLarge)
             .toolbarBackground(.clear, for: .navigationBar)
@@ -44,6 +61,15 @@ struct CreateActivityV2View: View {
                     if showsEditingToolbarButtons {
                         undoToolbarButton
                         redoToolbarButton
+                    }
+
+                    if isFriendPingSelected {
+                        Button {
+                            Haptics.light()
+                            closeSelectedFriendPing()
+                        } label: {
+                            Image(systemName: "xmark")
+                        }
                     }
 
 //                    if isActivitySelected && editedLiveAction == nil {
@@ -70,6 +96,10 @@ struct CreateActivityV2View: View {
                             .simultaneousGesture(TapGesture().onEnded { Haptics.light() })
                             .opacity(isEditingSubsheet ? 0 : 1)
                             .disabled(isEditingSubsheet)
+                    } else if let selectedFriendPing {
+                        Text("@\(selectedFriendPing.fromUsername)")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.white)
                     }
                 }
 
@@ -84,15 +114,38 @@ struct CreateActivityV2View: View {
                 }
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    if showsEditingToolbarButtons {
+                    if isKeyboardVisible {
+                        Button {
+                            Haptics.light()
+                            dismissKeyboard()
+                        } label: {
+                            Image(systemName: "chevron.compact.down.fill")
+                        }
+                    } else if showsEditingToolbarButtons {
                         activityKindMenu
+                    } else if isFriendPingSelected {
+                        ToolbarIconButton(systemImage: "arrow.clockwise") {
+                            reloadSelectedFriendPing()
+                        }
+                        .frame(width: 32, height: 32)
+                        .accessibilityLabel("Reload")
+
+                        ToolbarIconMenu(systemImage: "ellipsis", items: [
+                            ToolbarMenuItem(title: "Copiar", systemImage: "doc.on.doc") { copySelectedFriendPing() },
+                            ToolbarMenuItem(title: "Reeditar", systemImage: "pencil") { reeditSelectedFriendPing() },
+                            ToolbarMenuItem(title: "Eliminar", systemImage: "trash", isDestructive: true) { deleteSelectedFriendPing() }
+                        ])
+                        .frame(width: 32, height: 32)
                     } else if !isActivitySelected {
+                        cardSourceMenu
+
                         Button("Add", systemImage: "plus") {
                             Haptics.light()
                             withAnimation(animation) {
                                 select(store.createLiveActivityDraft())
                             }
                         }
+                        .disabled(cardSource != .own)
 
                         Button("Upgrade", systemImage: "crown.fill") {
                             Haptics.medium()
@@ -136,19 +189,6 @@ struct CreateActivityV2View: View {
 //                        .tint(.yellow)
 //                    }
                 }
-
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-
-                    Button {
-                        Haptics.light()
-                        dismissKeyboard()
-                    } label: {
-                        Image(systemName: "chevron.down")
-                    }
-                    .padding(.vertical, 8)
-                }
-
             }
             .onScrollGeometryChange(for: CGFloat.self) {
                 $0.contentOffset.y + $0.contentInsets.top
@@ -381,6 +421,161 @@ struct CreateActivityV2View: View {
         isActivitySelected && editedLiveAction == nil && !isPickingFriends && !isPickingSong && !isKeyboardVisible && successMessage == nil
     }
 
+    @ViewBuilder
+    private func ReceivedPingCardView(ping: ReceivedFriendPing) -> some View {
+        let isCurrent = ping.notificationID == selectedFriendPing?.notificationID
+
+        friendCardContent(ping: ping, isCurrent: isCurrent)
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.height
+            } action: { newValue in
+                friendCardHeights[ping.notificationID] = newValue
+            }
+            .contentShape(.rect)
+            .onTapGesture {
+                withAnimation(animation) {
+                    selectedFriendPing = ping
+                }
+            }
+            .contextMenu {
+                if !isFriendPingSelected {
+                    Button(role: .destructive) {
+                        deleteFriendPing(ping)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+            }
+            .visualEffect { [info, isFriendPingSelected] content, proxy in
+                let rect = proxy.frame(in: .scrollView)
+                let bounds = info.containerSize
+                let centeredSelectedOffset = -rect.minY
+                let hiddenCardOffset = bounds.height - rect.minY
+                let pushOffset = isCurrent ? centeredSelectedOffset : hiddenCardOffset
+
+                return content
+                    .scaleEffect(isFriendPingSelected && !isCurrent ? 0.95 : 1, anchor: .top)
+                    .offset(y: isFriendPingSelected ? pushOffset : 0)
+                    .opacity(isFriendPingSelected && !isCurrent ? 0 : 1)
+            }
+            .allowsHitTesting(isFriendPingSelected ? isCurrent : true)
+            .disabled(isFriendPingSelected && !isCurrent)
+    }
+
+    @ViewBuilder
+    private func friendCardContent(ping: ReceivedFriendPing, isCurrent: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if isCurrent {
+                Text("From @\(ping.fromUsername)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            ReceivedActivityPreviewView(snapshot: ping.snapshot)
+                .overlay(alignment: .topTrailing) {
+                    if !isCurrent {
+                        Text("Received from @\(ping.fromUsername) on \(Self.friendDateFormatter.string(from: ping.receivedAt))")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.75))
+                            .multilineTextAlignment(.trailing)
+                            .padding(.top, 10)
+                            .padding(.trailing, 12)
+                            .padding(.leading, 40)
+                    }
+                }
+
+            if isCurrent, let message = ping.message, !message.isEmpty {
+                Text("Message: \(message)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private static let friendDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM/yyyy"
+        return formatter
+    }()
+
+    private func switchCardSource(_ source: CardSource) {
+        guard cardSource != source else { return }
+        withAnimation(animation) {
+            cardSource = source
+        }
+        if source == .friends {
+            loadReceivedPings()
+        }
+    }
+
+    private func loadReceivedPings() {
+        receivedPings = WidgetContentStore.receivedFriendPings()
+        if let selectedFriendPing {
+            self.selectedFriendPing = receivedPings.first { $0.notificationID == selectedFriendPing.notificationID }
+        }
+    }
+
+    private func closeSelectedFriendPing() {
+        withAnimation(animation) {
+            selectedFriendPing = nil
+        }
+    }
+
+    /// `saveReceivedFriendPing` only ever writes once (idempotent against the widget's repeated
+    /// `.onAppear`), so a later `.update` push's changed content never lands here on its own —
+    /// this pulls the latest state from whatever Live Activity is actually still running.
+    private func reloadSelectedFriendPing() {
+        guard let selectedFriendPing else { return }
+        Haptics.light()
+        if
+            let activity = Activity<UnforgettyActivityAttributes>.activities.first(where: { $0.attributes.notificationID == selectedFriendPing.notificationID }),
+            let fromUsername = activity.content.state.fromUsername,
+            let snapshot = activity.content.state.friendSnapshot
+        {
+            WidgetContentStore.updateReceivedFriendPing(notificationID: selectedFriendPing.notificationID, fromUsername: fromUsername, message: activity.content.state.message, snapshot: snapshot)
+        }
+        loadReceivedPings()
+    }
+
+    private func copySelectedFriendPing() {
+        guard let selectedFriendPing else { return }
+        Haptics.light()
+        store.copiedEditions = ActivityEditionsClipboard(snapshot: selectedFriendPing.snapshot)
+    }
+
+    private func reeditSelectedFriendPing() {
+        guard let selectedFriendPing else { return }
+        Haptics.light()
+        let activity = ScheduledActivity(draft: LiveActivityDraft(snapshot: selectedFriendPing.snapshot), surface: .liveActivity, startDate: .now, status: .draft)
+        store.save(activity)
+        self.selectedFriendPing = nil
+        cardSource = .own
+        withAnimation(animation) {
+            select(activity)
+        }
+    }
+
+    private func deleteSelectedFriendPing() {
+        guard let selectedFriendPing else { return }
+        deleteFriendPing(selectedFriendPing)
+    }
+
+    private func deleteFriendPing(_ ping: ReceivedFriendPing) {
+        Haptics.light()
+        if selectedFriendPing?.notificationID == ping.notificationID {
+            withAnimation(animation) {
+                selectedFriendPing = nil
+            }
+        }
+        WidgetContentStore.deleteReceivedFriendPing(notificationID: ping.notificationID)
+        friendCardHeights.removeValue(forKey: ping.notificationID)
+        loadReceivedPings()
+    }
+
+    private var isFriendPingSelected: Bool {
+        selectedFriendPing != nil
+    }
+
     private var isEditingSubsheet: Bool {
         editedLiveAction != nil || isPickingFriends || isPickingSong
     }
@@ -456,6 +651,27 @@ struct CreateActivityV2View: View {
                     .offset(x: 6, y: -6)
             }
         }
+    }
+
+    private var cardSourceMenu: some View {
+        Menu {
+            Button {
+                Haptics.selection()
+                switchCardSource(.own)
+            } label: {
+                Label("Stack", systemImage: "square.stack.fill")
+            }
+
+            Button {
+                Haptics.selection()
+                switchCardSource(.friends)
+            } label: {
+                Label("Friend", systemImage: "person.2")
+            }
+        } label: {
+            Image(systemName: cardSource == .own ? "square.stack.fill" : "person.2")
+        }
+        .accessibilityLabel("Stack or Friend")
     }
 
     private var activityKindMenu: some View {
@@ -688,7 +904,7 @@ struct CreateActivityV2View: View {
     }
 
     private var isNavigationTitleHidden: Bool {
-        info.scrollOffset > 1 || isActivitySelected
+        info.scrollOffset > 1 || isActivitySelected || isFriendPingSelected
     }
 
     private var isActivitySelected: Bool {
@@ -756,7 +972,7 @@ struct CreateActivityV2View: View {
 
     @ViewBuilder
     private var screenBackground: some View {
-        if isActivitySelected {
+        if isActivitySelected || isFriendPingSelected {
             editingSurfaceBackground
                 .overlay(alignment: .topTrailing) {
                     editingBackgroundGlow
@@ -772,7 +988,7 @@ struct CreateActivityV2View: View {
     }
 
     private var editingSurfaceBackground: Color {
-        isActivitySelected ? .black : schemeBackground
+        isActivitySelected || isFriendPingSelected ? .black : schemeBackground
     }
 
     private var schemeBackground: Color {
@@ -1154,7 +1370,7 @@ private struct LiveActionItemEditSheet: View {
                             triggerFeedback()
 	                            focusedField = nil
 	                        } label: {
-                            Image(systemName: "chevron.down")
+                            Image(systemName: "chevron.compact.down.fill")
                         }
                         .padding(.vertical, 8)
                     }

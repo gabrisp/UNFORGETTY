@@ -13,7 +13,15 @@ struct StyleEditorView<VM: DraftEditingViewModel>: View {
         VStack(alignment: .leading, spacing: 16) {
             if viewModel.draft.kind == .music {
                 personalizationGroup {
+                    Picker("Art position", selection: $viewModel.draft.style.musicArtPosition) {
+                        Label("Left", systemImage: "align.horizontal.left").tag(ActivityStyle.MusicArtPosition.leading)
+                        Label("Right", systemImage: "align.horizontal.right").tag(ActivityStyle.MusicArtPosition.trailing)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+
                     musicLayoutPicker
+                        .padding(.top, 2)
 
                     Toggle("Border", isOn: $viewModel.draft.style.musicBorderEnabled)
                         .padding(.top, 2)
@@ -103,7 +111,7 @@ struct StyleEditorView<VM: DraftEditingViewModel>: View {
                 }
             }
 
-            personalizationGroup("Text") {
+            personalizationGroup("Content") {
                 settingsRow("Color") {
                     ColorPicker("Color", selection: viewModel.hexBinding(\.textHex))
                         .labelsHidden()
@@ -141,6 +149,19 @@ struct StyleEditorView<VM: DraftEditingViewModel>: View {
                     Slider(value: textSizeBinding, in: ActivityStyle.minimumTextSize...ActivityStyle.maximumTextSize, step: 1)
                 }
                 .padding(.vertical, 2)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        Text("Line spacing")
+                        Spacer()
+                        Text(String(format: "%.2f", viewModel.draft.style.lineSpacingMultiplier))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.58))
+                    }
+
+                    Slider(value: $viewModel.draft.style.lineSpacingMultiplier, in: 0...0.5)
+                }
+                .padding(.vertical, 2)
             }
 
             if viewModel.draft.kind == .check(.todoList) {
@@ -169,6 +190,7 @@ struct StyleEditorView<VM: DraftEditingViewModel>: View {
         .sensoryFeedback(.selection, trigger: viewModel.draft.style.font)
         .sensoryFeedback(.selection, trigger: viewModel.draft.style.checklistScheme)
         .sensoryFeedback(.selection, trigger: viewModel.draft.style.musicLayout)
+        .sensoryFeedback(.selection, trigger: viewModel.draft.style.musicArtPosition)
         .sensoryFeedback(.selection, trigger: viewModel.draft.style.musicBorderEnabled)
         .sensoryFeedback(.selection, trigger: viewModel.draft.style.musicShowsTitle)
         .sensoryFeedback(.selection, trigger: viewModel.draft.style.musicShowsArtist)

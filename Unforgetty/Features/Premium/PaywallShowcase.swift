@@ -9,12 +9,17 @@ struct PaywallShowcaseCard: Identifiable {
 }
 
 enum PaywallShowcase {
-    static let cards: [PaywallShowcaseCard] = [
+    // Two genuinely distinct sets (not one array reordered) so the two marquee rows never show the
+    // same card content, even offset.
+    static let cardsRowOne: [PaywallShowcaseCard] = [
         note("Take your vitamins 💊", background: "1C1C28", textHex: "FFFFFF", font: .rounded, alignment: .leading),
         note("Gym at 6:30pm 🏋️", gradientStart: "FF6B6B", gradientEnd: "FFA36B", angle: 120, textHex: "1A0F0A", font: .rounded, alignment: .center),
         note("Call mom", background: "0F2A24", textHex: "9CFFE0", font: .serif, alignment: .leading),
-        checklist(["Study session", "Chapter 4", "Review notes"], background: "3A1C71", textHex: "FFFFFF", font: .monospaced),
-        note("Water the plants 🌱", background: "16342A", textHex: "B7F5C9", font: .rounded, alignment: .center),
+        checklist(["Study session", "Chapter 4"], background: "3A1C71", textHex: "FFFFFF", font: .monospaced),
+        note("Water the plants 🌱", background: "16342A", textHex: "B7F5C9", font: .rounded, alignment: .center)
+    ]
+
+    static let cardsRowTwo: [PaywallShowcaseCard] = [
         note("Team standup in 10 min", gradientStart: "0F2027", gradientEnd: "2C5364", angle: 135, textHex: "E6FBFF", font: .rounded, alignment: .leading),
         checklist(["Read 20 pages 📖", "Meditate 10 min"], background: "2B2113", textHex: "F3D9A6", font: .serif),
         note("Meditate 10 min 🧘", gradientStart: "FDCBF1", gradientEnd: "E6DEE9", angle: 90, textHex: "3A2A3D", font: .rounded, alignment: .center),
@@ -86,26 +91,33 @@ enum PaywallShowcase {
 }
 
 struct PaywallMarqueeShowcase: View {
-    private let cardHeight: CGFloat = 90
+    // A note card's single line of text fits comfortably well under 90, but a checklist card's row
+    // height has a fixed 32pt-per-row floor (`ActivityContentView.checkbox`, shared with the real
+    // Live Activity, not something to shrink just for this compact showcase) — two rows plus their
+    // spacing and this card's own padding need ~108pt to actually fit without `.clipped()` cutting
+    // a row off.
+    private let cardHeight: CGFloat = 120
     private let horizontalPadding: CGFloat = 16
     private let spacing: CGFloat = 14
 
     // Reads the actual device screen width directly rather than a GeometryReader nested inside
     // a parent that pads and then un-pads itself with a hardcoded negative value — that only
     // works if the guess exactly matches the parent's real (system-default, not fixed) padding,
-    // which is fragile. This is exact regardless of what the parent around it does.
+    // which is fragile. This is exact regardless of what the parent around it does. Sized as a
+    // fraction of the screen (not full-width minus padding) so more than one card is visible at
+    // once — a marquee of one full-width card per "row position" doesn't read as a marquee.
     private var cardWidth: CGFloat {
         #if canImport(UIKit)
-        UIScreen.main.bounds.width - (horizontalPadding * 2)
+        UIScreen.main.bounds.width * 0.42
         #else
-        400 - (horizontalPadding * 2)
+        400 * 0.42
         #endif
     }
 
     var body: some View {
         VStack(spacing: spacing) {
             MarqueeRow(
-                cards: PaywallShowcase.cards,
+                cards: PaywallShowcase.cardsRowOne,
                 cardWidth: cardWidth,
                 cardHeight: cardHeight,
                 spacing: spacing,
@@ -114,7 +126,7 @@ struct PaywallMarqueeShowcase: View {
                 leadingPadding: 0
             )
             MarqueeRow(
-                cards: Array(PaywallShowcase.cards.rotated(by: 5)),
+                cards: PaywallShowcase.cardsRowTwo,
                 cardWidth: cardWidth,
                 cardHeight: cardHeight,
                 spacing: spacing,
@@ -206,10 +218,3 @@ private struct PaywallShowcaseCardView: View {
     }
 }
 
-private extension Array {
-    func rotated(by amount: Int) -> [Element] {
-        guard !isEmpty else { return self }
-        let offset = ((amount % count) + count) % count
-        return Array(self[offset...] + self[..<offset])
-    }
-}

@@ -178,6 +178,7 @@ private struct FriendSnapshotView: View {
             textSize: snapshot.textSize,
             alignment: snapshot.alignment,
             verticalAlignment: snapshot.verticalAlignment,
+            lineSpacingMultiplier: snapshot.lineSpacingMultiplier,
             borderHex: snapshot.borderHex,
             borderWidth: snapshot.borderWidth,
             checklistScheme: nil
@@ -221,7 +222,7 @@ private struct FriendSnapshotView: View {
             Text(noteText)
                 .font(.system(size: style.textSize, weight: .medium, design: style.fontDesign))
                 .multilineTextAlignment(style.textAlignment)
-                .lineSpacing(style.textSize * 0.15)
+                .lineSpacing(style.textSize * (style.lineSpacingMultiplier ?? 0.15))
                 .lineLimit(6)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: style.contentAlignment)
@@ -276,6 +277,7 @@ private struct FriendMusicSnapshotView: View {
             textSize: snapshot.textSize,
             alignment: snapshot.alignment,
             verticalAlignment: snapshot.verticalAlignment,
+            lineSpacingMultiplier: snapshot.lineSpacingMultiplier,
             borderHex: snapshot.borderHex,
             borderWidth: snapshot.borderWidth,
             checklistScheme: nil
@@ -322,47 +324,12 @@ private struct FriendMusicSnapshotView: View {
 
     private var realContent: some View {
         HStack(alignment: style.swiftUIVerticalAlignment, spacing: 16) {
-            Group {
-                if let albumArtImage {
-                    albumArtImage
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    ZStack {
-                        Color.secondary.opacity(0.12)
-                        Image(systemName: "music.note")
-                            .font(.title2.weight(.semibold))
-                            .foregroundStyle(Color(hex: style.textHex).opacity(0.55))
-                    }
-                }
-            }
-            .frame(width: 88, height: 88)
-            .clipShape(musicClipShape(for: snapshot.musicLayout))
-            .overlay {
-                if snapshot.musicBorderEnabled {
-                    musicClipShape(for: snapshot.musicLayout).stroke(Color(hex: snapshot.musicBorderHex), lineWidth: 3)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                if snapshot.musicShowsTitle {
-                    Text((snapshot.musicTitle?.isEmpty ?? true) ? "Music" : snapshot.musicTitle!)
-                        .font(.system(size: style.textSize * 0.5, weight: .semibold, design: style.fontDesign))
-                        .lineLimit(1)
-                }
-                if snapshot.musicShowsArtist, let artist = snapshot.musicArtist, !artist.isEmpty {
-                    Text(artist)
-                        .font(.system(size: style.textSize * 0.38, design: style.fontDesign))
-                        .foregroundStyle(Color(hex: style.textHex).opacity(0.7))
-                        .lineLimit(1)
-                }
-                if let message, !message.isEmpty {
-                    Text(message)
-                        .font(.system(size: style.textSize * 0.34, design: style.fontDesign))
-                        .foregroundStyle(Color(hex: style.textHex).opacity(0.85))
-                        .lineLimit(2)
-                        .padding(.top, 2)
-                }
+            if snapshot.musicArtPosition == "leading" {
+                musicArtGroup
+                musicTextGroup
+            } else {
+                musicTextGroup
+                musicArtGroup
             }
 
             Spacer(minLength: 0)
@@ -384,6 +351,54 @@ private struct FriendMusicSnapshotView: View {
             }
         }
         .modifier(OptionalWidgetURL(url: playURL))
+    }
+
+    private var musicArtGroup: some View {
+        Group {
+            if let albumArtImage {
+                albumArtImage
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    Color.secondary.opacity(0.12)
+                    Image(systemName: "music.note")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Color(hex: style.textHex).opacity(0.55))
+                }
+            }
+        }
+        .frame(width: 88, height: 88)
+        .clipShape(musicClipShape(for: snapshot.musicLayout))
+        .overlay {
+            if snapshot.musicBorderEnabled {
+                musicClipShape(for: snapshot.musicLayout).stroke(Color(hex: snapshot.musicBorderHex), lineWidth: 3)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var musicTextGroup: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if snapshot.musicShowsTitle {
+                Text((snapshot.musicTitle?.isEmpty ?? true) ? "Music" : snapshot.musicTitle!)
+                    .font(.system(size: style.textSize * 0.5, weight: .semibold, design: style.fontDesign))
+                    .lineLimit(1)
+            }
+            if snapshot.musicShowsArtist, let artist = snapshot.musicArtist, !artist.isEmpty {
+                Text(artist)
+                    .font(.system(size: style.textSize * 0.38, design: style.fontDesign))
+                    .foregroundStyle(Color(hex: style.textHex).opacity(0.7))
+                    .lineLimit(1)
+            }
+            if let message, !message.isEmpty {
+                Text(message)
+                    .font(.system(size: style.textSize * 0.34, design: style.fontDesign))
+                    .foregroundStyle(Color(hex: style.textHex).opacity(0.85))
+                    .lineLimit(2)
+                    .padding(.top, 2)
+            }
+        }
     }
 
     private func fetchAlbumArtIfNeeded() {
@@ -462,7 +477,7 @@ private struct LockScreenActivityView: View {
                 Text(noteText(for: draft))
                     .font(.system(size: draft.style.textSize, weight: .medium, design: draft.style.fontDesign))
                     .multilineTextAlignment(draft.style.textAlignment)
-                    .lineSpacing(draft.style.textSize * 0.15)
+                    .lineSpacing(draft.style.textSize * (draft.style.lineSpacingMultiplier ?? 0.15))
                     .lineLimit(6)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: draft.style.contentAlignment)
@@ -563,51 +578,64 @@ private struct LockScreenActivityView: View {
     // content (WidgetKit only re-renders on real content-state changes, not a persistent loop).
     private func musicContent(for draft: WidgetDraft) -> some View {
         HStack(alignment: draft.style.swiftUIVerticalAlignment, spacing: 16) {
-            if draft.style.musicShowsTitle != false || draft.style.musicShowsArtist != false || draft.style.musicShowsAlbum != false {
-                VStack(alignment: .leading, spacing: 4) {
-                    if draft.style.musicShowsTitle != false {
-                        Text((draft.musicTitle?.isEmpty ?? true) ? "Music" : draft.musicTitle!)
-                            .font(.system(size: draft.style.textSize * 0.55, weight: .semibold, design: draft.style.fontDesign))
-                            .lineLimit(1)
-                    }
-                    if draft.style.musicShowsArtist != false, let artist = draft.musicArtist, !artist.isEmpty {
-                        Text(artist)
-                            .font(.system(size: draft.style.textSize * 0.4, design: draft.style.fontDesign))
-                            .foregroundStyle(Color(hex: draft.style.textHex).opacity(0.7))
-                            .lineLimit(1)
-                    }
-                    if draft.style.musicShowsAlbum != false, let album = draft.musicAlbum, !album.isEmpty {
-                        Text(album)
-                            .font(.system(size: draft.style.textSize * 0.34, design: draft.style.fontDesign))
-                            .foregroundStyle(Color(hex: draft.style.textHex).opacity(0.5))
-                            .lineLimit(1)
-                    }
-                }
-            }
-
-            Group {
-                if let image = widgetContentImage(from: draft.musicAlbumArtData) {
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    ZStack {
-                        Color.secondary.opacity(0.12)
-                        Image(systemName: "music.note")
-                            .font(.title2.weight(.semibold))
-                            .foregroundStyle(Color(hex: draft.style.textHex).opacity(0.55))
-                    }
-                }
-            }
-            .frame(width: 112, height: 112)
-            .clipShape(musicClipShape(for: draft.style.musicLayout))
-            .overlay {
-                if draft.style.musicBorderEnabled == true {
-                    musicClipShape(for: draft.style.musicLayout).stroke(Color(hex: draft.style.musicBorderHex ?? "FFFFFF"), lineWidth: 3)
-                }
+            if draft.style.musicArtPosition == "leading" {
+                musicArtGroup(for: draft)
+                musicTextGroup(for: draft)
+            } else {
+                musicTextGroup(for: draft)
+                musicArtGroup(for: draft)
             }
         }
         .frame(maxWidth: .infinity, alignment: draft.style.contentAlignment)
+    }
+
+    @ViewBuilder
+    private func musicTextGroup(for draft: WidgetDraft) -> some View {
+        if draft.style.musicShowsTitle != false || draft.style.musicShowsArtist != false || draft.style.musicShowsAlbum != false {
+            VStack(alignment: .leading, spacing: 4) {
+                if draft.style.musicShowsTitle != false {
+                    Text((draft.musicTitle?.isEmpty ?? true) ? "Music" : draft.musicTitle!)
+                        .font(.system(size: draft.style.textSize * 0.55, weight: .semibold, design: draft.style.fontDesign))
+                        .lineLimit(1)
+                }
+                if draft.style.musicShowsArtist != false, let artist = draft.musicArtist, !artist.isEmpty {
+                    Text(artist)
+                        .font(.system(size: draft.style.textSize * 0.4, design: draft.style.fontDesign))
+                        .foregroundStyle(Color(hex: draft.style.textHex).opacity(0.7))
+                        .lineLimit(1)
+                }
+                if draft.style.musicShowsAlbum != false, let album = draft.musicAlbum, !album.isEmpty {
+                    Text(album)
+                        .font(.system(size: draft.style.textSize * 0.34, design: draft.style.fontDesign))
+                        .foregroundStyle(Color(hex: draft.style.textHex).opacity(0.5))
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+
+    private func musicArtGroup(for draft: WidgetDraft) -> some View {
+        Group {
+            if let image = widgetContentImage(from: draft.musicAlbumArtData) {
+                image
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    Color.secondary.opacity(0.12)
+                    Image(systemName: "music.note")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Color(hex: draft.style.textHex).opacity(0.55))
+                }
+            }
+        }
+        .frame(width: 112, height: 112)
+        .clipShape(musicClipShape(for: draft.style.musicLayout))
+        .overlay {
+            if draft.style.musicBorderEnabled == true {
+                musicClipShape(for: draft.style.musicLayout).stroke(Color(hex: draft.style.musicBorderHex ?? "FFFFFF"), lineWidth: 3)
+            }
+        }
     }
 
     private func liveActionTile(_ item: WidgetLiveActionItem, capacity: Int, fontScale: Double) -> some View {

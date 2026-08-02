@@ -258,7 +258,8 @@ function sanitizedSnapshot(raw) {
     musicBorderHex: string(raw.musicBorderHex, "FFFFFF", 8),
     musicShowsTitle: raw.musicShowsTitle !== false,
     musicShowsArtist: raw.musicShowsArtist !== false,
-    musicShowsAlbum: raw.musicShowsAlbum !== false
+    musicShowsAlbum: raw.musicShowsAlbum !== false,
+    musicArtPosition: raw.musicArtPosition === "leading" ? "leading" : "trailing"
   };
 }
 

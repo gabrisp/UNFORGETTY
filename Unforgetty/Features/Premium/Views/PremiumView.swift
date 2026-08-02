@@ -65,6 +65,7 @@ struct PremiumView: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity)
 
             Button {
                 purchaseSelected()
@@ -80,6 +81,7 @@ struct PremiumView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .tint(.yellow)
             .disabled(selectedProductID == nil || isPurchasing)
 
             Button("Restaurar compras") {
@@ -95,6 +97,7 @@ struct PremiumView: View {
                     .multilineTextAlignment(.center)
             }
         }
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, 20)
         .padding(.top, 16)
         .padding(.bottom, 8)
@@ -145,11 +148,11 @@ private struct PaywallPackageCardView: View {
             .frame(minHeight: 84)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(isSelected ? Color.indigo.opacity(0.16) : Color.secondary.opacity(0.08))
+                    .fill(isSelected ? Color.yellow.opacity(0.18) : Color.secondary.opacity(0.08))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(isSelected ? Color.indigo : Color.secondary.opacity(0.18), lineWidth: isSelected ? 2 : 1)
+                    .stroke(isSelected ? Color.yellow : Color.secondary.opacity(0.18), lineWidth: isSelected ? 2 : 1)
             )
         }
         .buttonStyle(.plain)

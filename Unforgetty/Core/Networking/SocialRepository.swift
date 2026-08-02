@@ -117,7 +117,8 @@ actor SocialRepository {
                 "musicBorderHex": snapshot.musicBorderHex,
                 "musicShowsTitle": snapshot.musicShowsTitle,
                 "musicShowsArtist": snapshot.musicShowsArtist,
-                "musicShowsAlbum": snapshot.musicShowsAlbum
+                "musicShowsAlbum": snapshot.musicShowsAlbum,
+                "musicArtPosition": snapshot.musicArtPosition
             ]
         ])
     }

@@ -50,6 +50,7 @@ struct FriendActivitySnapshot: Codable, Hashable {
     var textSize: Double
     var alignment: String
     var verticalAlignment: String = "center"
+    var lineSpacingMultiplier: Double = 0.15
     var borderHex: String
     var borderWidth: Double
     var musicTitle: String?
@@ -64,6 +65,7 @@ struct FriendActivitySnapshot: Codable, Hashable {
     var musicShowsTitle: Bool = true
     var musicShowsArtist: Bool = true
     var musicShowsAlbum: Bool = true
+    var musicArtPosition: String = "trailing"
 }
 
 /// A friend ping kept around after it arrives so it can still be opened later — separate from
@@ -92,6 +94,7 @@ struct WidgetStyle: Codable {
     var textSize: Double
     var alignment: String
     var verticalAlignment: String?
+    var lineSpacingMultiplier: Double?
     var borderHex: String?
     var borderWidth: Double?
     var checklistScheme: String?
@@ -103,6 +106,7 @@ struct WidgetStyle: Codable {
     var musicShowsTitle: Bool?
     var musicShowsArtist: Bool?
     var musicShowsAlbum: Bool?
+    var musicArtPosition: String?
 }
 
 struct WidgetDraft: Codable {

@@ -21,7 +21,7 @@ struct ActivityContentView: View {
                 Text(noteText)
                     .font(.system(size: draft.style.textSize, weight: .medium, design: draft.style.fontDesign))
                     .multilineTextAlignment(draft.style.textAlignment)
-                    .lineSpacing(draft.style.textSize * 0.15)
+                    .lineSpacing(draft.style.textSize * draft.style.lineSpacingMultiplier)
                     .lineLimit(6)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: draft.style.contentAlignment)
@@ -91,51 +91,64 @@ struct ActivityContentView: View {
     // that single always-live-editing context.
     private var musicContent: some View {
         HStack(alignment: draft.style.swiftUIVerticalAlignment, spacing: 16) {
-            if draft.style.musicShowsTitle || draft.style.musicShowsArtist || draft.style.musicShowsAlbum {
-                VStack(alignment: .leading, spacing: 4) {
-                    if draft.style.musicShowsTitle {
-                        Text(draft.musicTitle.isEmpty ? "Music" : draft.musicTitle)
-                            .font(.system(size: draft.style.textSize * 0.55, weight: .semibold, design: draft.style.fontDesign))
-                            .lineLimit(1)
-                    }
-                    if draft.style.musicShowsArtist, !draft.musicArtist.isEmpty {
-                        Text(draft.musicArtist)
-                            .font(.system(size: draft.style.textSize * 0.4, design: draft.style.fontDesign))
-                            .foregroundStyle(Color(hex: draft.style.textHex).opacity(0.7))
-                            .lineLimit(1)
-                    }
-                    if draft.style.musicShowsAlbum, !draft.musicAlbum.isEmpty {
-                        Text(draft.musicAlbum)
-                            .font(.system(size: draft.style.textSize * 0.34, design: draft.style.fontDesign))
-                            .foregroundStyle(Color(hex: draft.style.textHex).opacity(0.5))
-                            .lineLimit(1)
-                    }
-                }
-            }
-
-            Group {
-                if let image = musicAlbumArtImage {
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    ZStack {
-                        Color.secondary.opacity(0.12)
-                        Image(systemName: "music.note")
-                            .font(.title2.weight(.semibold))
-                            .foregroundStyle(Color(hex: draft.style.textHex).opacity(0.55))
-                    }
-                }
-            }
-            .frame(width: 112, height: 112)
-            .clipShape(draft.style.musicLayout.clipShape)
-            .overlay {
-                if draft.style.musicBorderEnabled {
-                    draft.style.musicLayout.clipShape.stroke(Color(hex: draft.style.musicBorderHex), lineWidth: 3)
-                }
+            if draft.style.musicArtPosition == .leading {
+                musicArtGroup
+                musicTextGroup
+            } else {
+                musicTextGroup
+                musicArtGroup
             }
         }
         .frame(maxWidth: .infinity, alignment: draft.style.contentAlignment)
+    }
+
+    @ViewBuilder
+    private var musicTextGroup: some View {
+        if draft.style.musicShowsTitle || draft.style.musicShowsArtist || draft.style.musicShowsAlbum {
+            VStack(alignment: .leading, spacing: 4) {
+                if draft.style.musicShowsTitle {
+                    Text(draft.musicTitle.isEmpty ? "Music" : draft.musicTitle)
+                        .font(.system(size: draft.style.textSize * 0.55, weight: .semibold, design: draft.style.fontDesign))
+                        .lineLimit(1)
+                }
+                if draft.style.musicShowsArtist, !draft.musicArtist.isEmpty {
+                    Text(draft.musicArtist)
+                        .font(.system(size: draft.style.textSize * 0.4, design: draft.style.fontDesign))
+                        .foregroundStyle(Color(hex: draft.style.textHex).opacity(0.7))
+                        .lineLimit(1)
+                }
+                if draft.style.musicShowsAlbum, !draft.musicAlbum.isEmpty {
+                    Text(draft.musicAlbum)
+                        .font(.system(size: draft.style.textSize * 0.34, design: draft.style.fontDesign))
+                        .foregroundStyle(Color(hex: draft.style.textHex).opacity(0.5))
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+
+    private var musicArtGroup: some View {
+        Group {
+            if let image = musicAlbumArtImage {
+                image
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    Color.secondary.opacity(0.12)
+                    Image(systemName: "music.note")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Color(hex: draft.style.textHex).opacity(0.55))
+                }
+            }
+        }
+        .frame(width: 112, height: 112)
+        .clipShape(draft.style.musicLayout.clipShape)
+        .overlay {
+            if draft.style.musicBorderEnabled {
+                draft.style.musicLayout.clipShape.stroke(Color(hex: draft.style.musicBorderHex), lineWidth: 3)
+            }
+        }
     }
 
     private var musicAlbumArtImage: Image? {
