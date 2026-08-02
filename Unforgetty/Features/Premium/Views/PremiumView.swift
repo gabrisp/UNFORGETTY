@@ -15,6 +15,15 @@ struct PremiumView: View {
                         PaywallMarqueeShowcase()
                             .padding(.horizontal, -16)
                             .padding(.top, 4)
+                            // The marquee's cards size to their own content (see PaywallShowcase's
+                            // MarqueeRow), so its true ideal width is 3 full sets of cards side by
+                            // side — hundreds of points wider than the screen, by design, since
+                            // that's what the infinite-scroll loop needs. `.frame(maxWidth: .infinity)`
+                            // further up this VStack does not cap that demand back down (it only
+                            // allows growth, it never shrinks), so this needs its own explicit clip
+                            // right at the source to stop it from inflating every ancestor's
+                            // reported width all the way up.
+                            .clipped()
 
                         Image(systemName: store.isPremium ? "checkmark.seal.fill" : "sparkles")
                             .font(.largeTitle)
@@ -33,8 +42,18 @@ struct PremiumView: View {
 
                 if !store.isPremium {
                     bottomPurchaseOverlay
+                        // ZStack does NOT clip its children by default — if anything inside the
+                        // footer ever reports an ideal width bigger than the screen (a button's
+                        // intrinsic content size, an un-truncated label, ...), `.frame(maxWidth:
+                        // .infinity)` alone does not cap that; it only ALLOWS growth up to that
+                        // amount, it doesn't shrink an oversized child back down. `.clipped()` is
+                        // what actually enforces "never wider than my own bounds," regardless of
+                        // what any descendant demands.
+                        .clipped()
                 }
             }
+            .frame(maxWidth: .infinity)
+            .clipped()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
