@@ -309,15 +309,19 @@ struct CreateActivityV2View: View {
                 return
             }
 
+            // `editViewModel.load(activity)` (fresh selection, nothing edited) fires this same
+            // onChange — same trap as normalizeActivityTitle above. Only persist (the expensive
+            // full-store rewrite) when this is a genuine edit to the activity already open, not
+            // whenever `.activity` merely changes for any reason including just switching selection.
             if oldValue.id == newValue.id, oldValue != newValue {
                 undoStack.append(oldValue)
                 redoStack.removeAll()
+                editViewModel.saveDraft(store: store)
             }
             selectedActivity = newValue
             if presentedSheetActivity != nil && editedLiveAction == nil {
                 presentedSheetActivity = newValue
             }
-            editViewModel.saveDraft(store: store)
         }
         .trackKeyboardVisibility(
             isKeyboardVisible: $isKeyboardVisible,
@@ -910,14 +914,16 @@ struct CreateActivityV2View: View {
         }
     }
 
+    // Called on every select()/close/send — including just tapping a card open to look at it, with
+    // nothing edited. `saveDraft` is expensive (ActivityStore.activities' didSet does a full
+    // Core Data delete-and-reinsert-everything plus rewrites every activity's images to disk), so
+    // this must stay a genuine no-op when the title didn't actually need normalizing — it was
+    // previously calling saveDraft unconditionally, turning "tap to open" into a full-store
+    // rewrite on the main thread during the card's own opening animation.
     private func normalizeActivityTitle() {
         let trimmedTitle = editViewModel.draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedTitle.isEmpty {
-            // Disabled for now — don't auto-fill an empty title with "Activity #N".
-            // editViewModel.draft.title = defaultActivityTitle(for: editViewModel.activity)
-        } else if trimmedTitle != editViewModel.draft.title {
-            editViewModel.draft.title = trimmedTitle
-        }
+        guard !trimmedTitle.isEmpty, trimmedTitle != editViewModel.draft.title else { return }
+        editViewModel.draft.title = trimmedTitle
         editViewModel.saveDraft(store: store)
     }
 
