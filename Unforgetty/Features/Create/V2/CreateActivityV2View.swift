@@ -435,11 +435,13 @@ struct CreateActivityV2View: View {
             .opacity(editViewModel.draft.liveActionItems.count < 8 ? 1 : 0)
             .disabled(editViewModel.draft.liveActionItems.count >= 8)
             .animation(.snappy, value: editViewModel.draft.liveActionItems.count)
-        } else if editViewModel.draft.kind == .note || editViewModel.draft.kind == .music {
-            // Actions and checklists don't sync cross-device, and images can't be pushed (the raw
-            // bytes blow the ~4KB APNs content-state limit) — only note and music content can
-            // reach a friend's device, so this only shows for those kinds. Music's own picker
-            // opens by tapping the album art in the preview (like image does), not a toolbar button.
+        } else if editViewModel.draft.kind == .note || editViewModel.draft.kind == .music || editViewModel.draft.kind == .image {
+            // Actions and checklists don't sync cross-device (device-local shortcuts / no
+            // cross-device store). Note, music, and image content can all reach a friend's device —
+            // image uploads its background photo to the "images" Storage bucket right before
+            // sending (raw bytes don't fit the ~4KB push payload) instead of embedding it inline,
+            // same idea as music's Spotify CDN URL. Music/image's own picker opens by tapping the
+            // art in the preview, not this toolbar button.
             friendPickerButton
                 .task { await editViewModel.loadFriends() }
         }
@@ -558,7 +560,7 @@ struct CreateActivityV2View: View {
                 .foregroundStyle(.black)
         }
         .buttonStyle(.glassProminent)
-        .tint(.yellow)
+        .tint(!editViewModel.sendToFriendUsernames.isEmpty ? Color(hex: editViewModel.draft.style.friendSendButtonColorHex) : .yellow)
         .controlSize(.small)
         .disabled(isSendDisabled)
     }
@@ -595,8 +597,9 @@ struct CreateActivityV2View: View {
     }
 
     private var isSendDisabled: Bool {
+        // A message is optional — picking at least one friend is enough to send.
         if !editViewModel.sendToFriendUsernames.isEmpty {
-            return editViewModel.friendMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return false
         }
         // No selected weekday is valid while scheduling: it means "just this once", not "nothing
         // set" — see CreateActivityV2EditViewModel.effectiveRecurrence.

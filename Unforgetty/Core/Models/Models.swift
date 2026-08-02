@@ -227,6 +227,10 @@ struct ActivityStyle: Codable, Hashable {
     var gradientCenterX: Double = 0.5
     var gradientCenterY: Double = 0.5
     var backgroundImageData: Data?
+    /// Uploaded to the "images" Storage bucket right before a `.image`-kind activity is sent to a
+    /// friend — raw bytes can't fit in the ~4KB push payload (same constraint music album art has,
+    /// solved the same way via `musicAlbumArtURL`), so this URL is what actually crosses devices.
+    var backgroundImageURL: String?
     /// Set once the user manually touches any background control — before that, `.music` content
     /// is free to auto-derive a gradient from the picked track's album art without clobbering a
     /// deliberate choice.
@@ -264,6 +268,11 @@ struct ActivityStyle: Codable, Hashable {
     var musicShowsAlbum = true
     /// Which side of the card the album art sits on, relative to the title/artist/album text.
     var musicArtPosition = MusicArtPosition.trailing
+    /// Local-only UI chrome (the "Enviar" button's tint in the friend-send compose flow) — never
+    /// rendered into the Live Activity itself and never sent to a friend, but still lives on the
+    /// per-draft style (not shared view @State) so it resets to the default with every other card,
+    /// instead of leaking whatever color was last picked into the next card opened.
+    var friendSendButtonColorHex = "FFCC00"
     enum MusicArtPosition: String, Codable, CaseIterable, Identifiable {
         case leading, trailing
 
@@ -358,7 +367,7 @@ struct ActivityStyle: Codable, Hashable {
         }
     }
 
-    private enum CodingKeys: String, CodingKey { case backgroundHex, gradientStartHex, gradientEndHex, gradientKind, gradientAngle, gradientCenterX, gradientCenterY, backgroundImageData, backgroundIsCustomized, textHex, backgroundMode, font, textSize, alignment, verticalAlignment, lineSpacingMultiplier, borderHex, borderWidth, checklistScheme, imageInset, imageOffsetY, musicLayout, musicBorderEnabled, musicBorderHex, musicShowsTitle, musicShowsArtist, musicShowsAlbum, musicArtPosition }
+    private enum CodingKeys: String, CodingKey { case backgroundHex, gradientStartHex, gradientEndHex, gradientKind, gradientAngle, gradientCenterX, gradientCenterY, backgroundImageData, backgroundImageURL, backgroundIsCustomized, textHex, backgroundMode, font, textSize, alignment, verticalAlignment, lineSpacingMultiplier, borderHex, borderWidth, checklistScheme, imageInset, imageOffsetY, musicLayout, musicBorderEnabled, musicBorderHex, musicShowsTitle, musicShowsArtist, musicShowsAlbum, musicArtPosition, friendSendButtonColorHex }
 
     var horizontalAlignment: HorizontalAlignment {
         switch alignment {
@@ -411,6 +420,7 @@ struct ActivityStyle: Codable, Hashable {
         gradientCenterX = try container.decodeIfPresent(Double.self, forKey: .gradientCenterX) ?? 0.5
         gradientCenterY = try container.decodeIfPresent(Double.self, forKey: .gradientCenterY) ?? 0.5
         backgroundImageData = try container.decodeIfPresent(Data.self, forKey: .backgroundImageData)
+        backgroundImageURL = try container.decodeIfPresent(String.self, forKey: .backgroundImageURL)
         backgroundIsCustomized = try container.decodeIfPresent(Bool.self, forKey: .backgroundIsCustomized) ?? false
         textHex = try container.decodeIfPresent(String.self, forKey: .textHex) ?? "111111"
         backgroundMode = try container.decodeIfPresent(BackgroundMode.self, forKey: .backgroundMode) ?? .plain
@@ -432,6 +442,7 @@ struct ActivityStyle: Codable, Hashable {
         musicShowsArtist = try container.decodeIfPresent(Bool.self, forKey: .musicShowsArtist) ?? true
         musicShowsAlbum = try container.decodeIfPresent(Bool.self, forKey: .musicShowsAlbum) ?? true
         musicArtPosition = try container.decodeIfPresent(MusicArtPosition.self, forKey: .musicArtPosition) ?? .trailing
+        friendSendButtonColorHex = try container.decodeIfPresent(String.self, forKey: .friendSendButtonColorHex) ?? "FFCC00"
     }
 }
 
@@ -442,6 +453,7 @@ extension ActivityStyle {
     init(snapshot: FriendActivitySnapshot) {
         self.init()
         backgroundHex = snapshot.backgroundHex
+        backgroundImageURL = snapshot.imageURL
         backgroundMode = BackgroundMode(rawValue: snapshot.backgroundMode) ?? .plain
         gradientStartHex = snapshot.gradientStartHex
         gradientEndHex = snapshot.gradientEndHex
@@ -544,7 +556,9 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
     }
 
     /// The self-contained payload sent to a friend's device — see `FriendActivitySnapshot`.
-    /// Image backgrounds fall back to their plain background color since raw bytes won't fit.
+    /// `.image` carries a Storage URL (uploaded right before sending — see
+    /// CreateActivityV2EditViewModel.send()) instead of raw bytes, the same way `.music` already
+    /// carries `musicAlbumArtURL` instead of `musicAlbumArtData`.
     var friendActivitySnapshot: FriendActivitySnapshot {
         if kind == .music {
             return FriendActivitySnapshot(
@@ -581,6 +595,29 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
                 musicArtPosition: style.musicArtPosition.rawValue
             )
         }
+        if kind == .image {
+            return FriendActivitySnapshot(
+                kind: "image",
+                body: "",
+                backgroundHex: style.backgroundHex,
+                backgroundMode: style.backgroundMode == .gradient ? "gradient" : "plain",
+                gradientStartHex: style.gradientStartHex,
+                gradientEndHex: style.gradientEndHex,
+                gradientKind: style.gradientKind.rawValue,
+                gradientAngle: style.gradientAngle,
+                gradientCenterX: style.gradientCenterX,
+                gradientCenterY: style.gradientCenterY,
+                textHex: style.textHex,
+                font: style.font.rawValue,
+                textSize: style.textSize,
+                alignment: style.alignment.rawValue,
+                verticalAlignment: style.verticalAlignment.rawValue,
+                lineSpacingMultiplier: style.lineSpacingMultiplier,
+                borderHex: style.borderHex,
+                borderWidth: style.borderWidth,
+                imageURL: style.backgroundImageURL
+            )
+        }
         return FriendActivitySnapshot(
             body: body,
             backgroundHex: style.backgroundHex,
@@ -610,7 +647,7 @@ extension LiveActivityDraft {
     /// nil: a snapshot never carries the raw bytes (too big for the APNs payload), only a URL.
     init(snapshot: FriendActivitySnapshot) {
         self.init()
-        kind = snapshot.kind == "music" ? .music : .note
+        kind = snapshot.kind == "music" ? .music : (snapshot.kind == "image" ? .image : .note)
         body = snapshot.body
         style = ActivityStyle(snapshot: snapshot)
         musicTitle = snapshot.musicTitle ?? ""

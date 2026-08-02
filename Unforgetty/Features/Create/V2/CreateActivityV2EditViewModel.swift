@@ -76,6 +76,10 @@ final class CreateActivityV2EditViewModel: DraftEditingViewModel, ObservableObje
         self.scheduleEndDate = activity.endDate
         self.tagName = ""
         self.errorMessage = nil
+        // A one-off compose in progress for the PREVIOUS card must not leak into the next one —
+        // each card gets its own blank compose state, not a shared draft that survives switching.
+        self.sendToFriendUsernames = []
+        self.friendMessage = ""
     }
 
     func clearError() {
@@ -311,8 +315,8 @@ final class CreateActivityV2EditViewModel: DraftEditingViewModel, ObservableObje
 
     func send(store: ActivityStore) async -> Bool {
         if !sendToFriendUsernames.isEmpty {
-            guard draft.kind == .note || draft.kind == .music else {
-                errorMessage = "Solo se pueden enviar notas y música a amigos."
+            guard draft.kind == .note || draft.kind == .music || draft.kind == .image else {
+                errorMessage = "Solo se pueden enviar notas, música e imágenes a amigos."
                 return false
             }
             guard let myUsername else {
@@ -320,9 +324,17 @@ final class CreateActivityV2EditViewModel: DraftEditingViewModel, ObservableObje
                 return false
             }
             let trimmedMessage = friendMessage.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedMessage.isEmpty else {
-                errorMessage = "Escribe un mensaje para tu amigo."
-                return false
+            // Re-uploaded on every send (including a resend/update of an already-running ping) so
+            // an image change since the last send always reaches the friend's device — the small
+            // amount of bucket churn from re-uploading an unchanged photo is worth not having to
+            // track "did the image actually change" separately.
+            if draft.kind == .image, let imageData = draft.style.backgroundImageData {
+                do {
+                    draft.style.backgroundImageURL = try await SocialRepository.shared.uploadImage(imageData)
+                } catch {
+                    errorMessage = error.localizedDescription
+                    return false
+                }
             }
             let snapshot = draft.friendActivitySnapshot
             // Stable per activity, shared with every friend it's sent to (and echoed back to us as

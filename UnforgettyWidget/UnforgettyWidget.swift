@@ -436,6 +436,131 @@ private struct FriendMusicSnapshotView: View {
     }
 }
 
+/// A friend's `.image`-kind card — the photo itself is the whole content, uploaded to the
+/// "images" Storage bucket right before sending (see CreateActivityV2EditViewModel.send()) since
+/// raw bytes don't fit the push payload. Fetch/cache mechanics mirror
+/// FriendMusicSnapshotView's album art exactly, reusing the same cache (keyed by notificationID,
+/// generic despite the "musicAlbumArt" name — a given ping is only ever one kind, so there's no
+/// collision risk sharing it instead of adding a parallel image-only cache).
+private struct FriendImageSnapshotView: View {
+    let notificationID: String
+    let fromUsername: String
+    let message: String?
+    let snapshot: FriendActivitySnapshot
+    @State private var imageData: Data?
+
+    private var style: WidgetStyle {
+        WidgetStyle(
+            backgroundHex: snapshot.backgroundHex,
+            gradientStartHex: snapshot.gradientStartHex,
+            gradientEndHex: snapshot.gradientEndHex,
+            gradientKind: snapshot.gradientKind,
+            gradientAngle: snapshot.gradientAngle,
+            gradientCenterX: snapshot.gradientCenterX,
+            gradientCenterY: snapshot.gradientCenterY,
+            backgroundImageData: nil,
+            textHex: snapshot.textHex,
+            backgroundMode: snapshot.backgroundMode,
+            font: snapshot.font,
+            textSize: snapshot.textSize,
+            alignment: snapshot.alignment,
+            verticalAlignment: snapshot.verticalAlignment,
+            lineSpacingMultiplier: snapshot.lineSpacingMultiplier,
+            borderHex: snapshot.borderHex,
+            borderWidth: snapshot.borderWidth,
+            checklistScheme: nil
+        )
+    }
+
+    private var contentImage: Image? {
+        #if canImport(UIKit)
+        guard let imageData, let uiImage = ImageDecodeCache.image(for: imageData) else { return nil }
+        return Image(uiImage: uiImage)
+        #else
+        return nil
+        #endif
+    }
+
+    private var showsTeaser: Bool {
+        guard let message, !message.isEmpty else { return false }
+        return !WidgetContentStore.isFriendMessageRevealed(notificationID: notificationID)
+    }
+
+    var body: some View {
+        Group {
+            if showsTeaser {
+                FriendMessageTeaserView(notificationID: notificationID, fromUsername: fromUsername, style: style, kind: "image")
+            } else {
+                realContent
+            }
+        }
+        .contentShape(.rect)
+        // No Spotify-style external link here (unlike music's circle) — the whole card just
+        // opens the app to this ping's saved preview, same as the note variant.
+        .widgetURL(URL(string: "unforgetty://friend-ping/\(notificationID)"))
+        .onAppear {
+            WidgetContentStore.saveReceivedFriendPing(
+                notificationID: notificationID,
+                fromUsername: fromUsername,
+                message: message,
+                snapshot: snapshot
+            )
+            fetchImageIfNeeded()
+        }
+    }
+
+    private var realContent: some View {
+        Group {
+            if let contentImage {
+                contentImage
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    Color.secondary.opacity(0.12)
+                    Image(systemName: "photo")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Color(hex: style.textHex).opacity(0.55))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: 160)
+        .clipped()
+        .overlay(alignment: .topTrailing) {
+            Text("Sent by @\(fromUsername)")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.85))
+                .padding(.top, 10)
+                .padding(.trailing, 14)
+        }
+        .overlay(alignment: .bottomLeading) {
+            if let message, !message.isEmpty {
+                Text(message)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(10)
+            }
+        }
+    }
+
+    private func fetchImageIfNeeded() {
+        guard imageData == nil else { return }
+        if let cached = WidgetContentStore.musicAlbumArt(notificationID: notificationID) {
+            imageData = cached
+            return
+        }
+        guard let urlString = snapshot.imageURL, let url = URL(string: urlString) else { return }
+        Task {
+            guard let (data, _) = try? await URLSession.shared.data(from: url) else { return }
+            WidgetContentStore.saveMusicAlbumArt(notificationID: notificationID, data: data)
+            await MainActor.run {
+                imageData = data
+            }
+            await WidgetLiveActivityRefresher.refresh(notificationID: notificationID)
+        }
+    }
+}
+
 /// `.widgetURL` requires a non-optional `URL`, but the track's Spotify link is only known once a
 /// snapshot decodes successfully — this keeps the call site a plain optional instead of forcing a
 /// throwaway fallback URL.
@@ -463,6 +588,8 @@ private struct LockScreenActivityView: View {
             interactiveActivityContent(for: draft)
         } else if let fromUsername = state.fromUsername, let snapshot = state.friendSnapshot, snapshot.kind == "music" {
             FriendMusicSnapshotView(notificationID: notificationID, fromUsername: fromUsername, message: state.message, snapshot: snapshot)
+        } else if let fromUsername = state.fromUsername, let snapshot = state.friendSnapshot, snapshot.kind == "image" {
+            FriendImageSnapshotView(notificationID: notificationID, fromUsername: fromUsername, message: state.message, snapshot: snapshot)
         } else if let fromUsername = state.fromUsername, let snapshot = state.friendSnapshot {
             FriendSnapshotView(notificationID: notificationID, fromUsername: fromUsername, message: state.message, snapshot: snapshot)
         } else if let fromUsername = state.fromUsername, let message = state.message {

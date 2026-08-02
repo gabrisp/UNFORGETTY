@@ -30,9 +30,11 @@ struct FriendPickerSheet: View {
                         friendsSection
 
                         if !viewModel.sendToFriendUsernames.isEmpty {
-                            editorSection("Mensaje") {
+                            editorSection("Mensaje (opcional)") {
                                 TextField("Escribe algo…", text: $viewModel.friendMessage, axis: .vertical)
                                     .lineLimit(1...4)
+
+                                ColorPicker("Color del botón de enviar", selection: viewModel.hexBinding(\.friendSendButtonColorHex), supportsOpacity: false)
                             }
                         }
                     }

@@ -18,6 +18,8 @@ struct ReceivedFriendPingSheet: View {
             VStack(alignment: .leading, spacing: 20) {
                 if ping.snapshot.kind == "music" {
                     musicContent
+                } else if ping.snapshot.kind == "image" {
+                    imageContent
                 } else {
                     Text(noteText)
                         .font(.system(size: style.textSize, weight: .medium, design: style.fontDesign))
@@ -57,6 +59,28 @@ struct ReceivedFriendPingSheet: View {
             }
         }
         .preferredColorScheme(.dark)
+    }
+
+    @ViewBuilder
+    private var imageContent: some View {
+        Group {
+            if let urlString = ping.snapshot.imageURL, let url = URL(string: urlString) {
+                AsyncImage(url: url) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    Color.secondary.opacity(0.12)
+                }
+            } else {
+                ZStack {
+                    Color.secondary.opacity(0.12)
+                    Image(systemName: "photo")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Color(hex: style.textHex).opacity(0.55))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 160)
+        .clipShape(.rect(cornerRadius: 24, style: .continuous))
     }
 
     @ViewBuilder

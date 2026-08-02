@@ -82,45 +82,66 @@ actor SocialRepository {
         let _: StatusResponse = try await execute(action: "registerActivityUpdateToken", extra: extra)
     }
 
+    /// Uploads a `.image`-kind activity's background photo to the "images" Storage bucket so a
+    /// friend's device can actually load it — raw bytes can't fit in the push payload. Returns the
+    /// resulting file's public view URL.
+    func uploadImage(_ data: Data) async throws -> String {
+        let response: UploadImageResponse = try await execute(action: "uploadImage", extra: [
+            "imageBase64": data.base64EncodedString()
+        ])
+        guard !response.url.isEmpty else { throw SocialError.requestFailed(detail: "empty_upload_url") }
+        return response.url
+    }
+
+    /// Split out of sendToFriend's call site — a single `[String: Any]` literal this size (30+
+    /// keys, after adding imageURL) previously pushed the type-checker into the same
+    /// "unable to type-check in reasonable time" failure mode PaywallShowcaseCardView.body hit
+    /// earlier — annotating this as its own statement with an explicit type keeps each expression
+    /// small enough to check quickly regardless of how many fields FriendActivitySnapshot grows to.
+    private func snapshotPayload(_ snapshot: FriendActivitySnapshot) -> [String: Any] {
+        [
+            "kind": snapshot.kind,
+            "imageURL": snapshot.imageURL ?? "",
+            "body": snapshot.body,
+            "backgroundHex": snapshot.backgroundHex,
+            "backgroundMode": snapshot.backgroundMode,
+            "gradientStartHex": snapshot.gradientStartHex,
+            "gradientEndHex": snapshot.gradientEndHex,
+            "gradientKind": snapshot.gradientKind,
+            "gradientAngle": snapshot.gradientAngle,
+            "gradientCenterX": snapshot.gradientCenterX,
+            "gradientCenterY": snapshot.gradientCenterY,
+            "textHex": snapshot.textHex,
+            "font": snapshot.font,
+            "textSize": snapshot.textSize,
+            "alignment": snapshot.alignment,
+            "verticalAlignment": snapshot.verticalAlignment,
+            "lineSpacingMultiplier": snapshot.lineSpacingMultiplier,
+            "borderHex": snapshot.borderHex,
+            "borderWidth": snapshot.borderWidth,
+            "musicTitle": snapshot.musicTitle ?? "",
+            "musicArtist": snapshot.musicArtist ?? "",
+            "musicAlbum": snapshot.musicAlbum ?? "",
+            "musicSpotifyTrackID": snapshot.musicSpotifyTrackID ?? "",
+            "musicSpotifyURL": snapshot.musicSpotifyURL ?? "",
+            "musicAlbumArtURL": snapshot.musicAlbumArtURL ?? "",
+            "musicLayout": snapshot.musicLayout,
+            "musicBorderEnabled": snapshot.musicBorderEnabled,
+            "musicBorderHex": snapshot.musicBorderHex,
+            "musicShowsTitle": snapshot.musicShowsTitle,
+            "musicShowsArtist": snapshot.musicShowsArtist,
+            "musicShowsAlbum": snapshot.musicShowsAlbum,
+            "musicArtPosition": snapshot.musicArtPosition
+        ]
+    }
+
     func sendToFriend(fromUsername: String, toUsername: String, message: String, notificationID: String, snapshot: FriendActivitySnapshot) async throws {
         let _: StatusResponse = try await execute(action: "sendToFriend", extra: [
             "fromUsername": fromUsername,
             "toUsername": toUsername,
             "message": message,
             "notificationID": notificationID,
-            "snapshot": [
-                "kind": snapshot.kind,
-                "body": snapshot.body,
-                "backgroundHex": snapshot.backgroundHex,
-                "backgroundMode": snapshot.backgroundMode,
-                "gradientStartHex": snapshot.gradientStartHex,
-                "gradientEndHex": snapshot.gradientEndHex,
-                "gradientKind": snapshot.gradientKind,
-                "gradientAngle": snapshot.gradientAngle,
-                "gradientCenterX": snapshot.gradientCenterX,
-                "gradientCenterY": snapshot.gradientCenterY,
-                "textHex": snapshot.textHex,
-                "font": snapshot.font,
-                "textSize": snapshot.textSize,
-                "alignment": snapshot.alignment,
-                "verticalAlignment": snapshot.verticalAlignment,
-                "lineSpacingMultiplier": snapshot.lineSpacingMultiplier,
-                "borderHex": snapshot.borderHex,
-                "borderWidth": snapshot.borderWidth,
-                "musicTitle": snapshot.musicTitle ?? "",
-                "musicArtist": snapshot.musicArtist ?? "",
-                "musicAlbum": snapshot.musicAlbum ?? "",
-                "musicSpotifyTrackID": snapshot.musicSpotifyTrackID ?? "",
-                "musicSpotifyURL": snapshot.musicSpotifyURL ?? "",
-                "musicAlbumArtURL": snapshot.musicAlbumArtURL ?? "",
-                "musicLayout": snapshot.musicLayout,
-                "musicBorderEnabled": snapshot.musicBorderEnabled,
-                "musicBorderHex": snapshot.musicBorderHex,
-                "musicShowsTitle": snapshot.musicShowsTitle,
-                "musicShowsArtist": snapshot.musicShowsArtist,
-                "musicShowsAlbum": snapshot.musicShowsAlbum,
-                "musicArtPosition": snapshot.musicArtPosition
-            ]
+            "snapshot": snapshotPayload(snapshot)
         ])
     }
 
@@ -189,6 +210,7 @@ actor SocialRepository {
     private struct UsernameResponse: Decodable { let username: String? }
     private struct SearchResponse: Decodable { let found: Bool; let userID: String? }
     private struct StatusResponse: Decodable { let status: String? }
+    private struct UploadImageResponse: Decodable { let url: String }
     private struct FriendsResponse: Decodable { let friends: [Friend] }
     private struct RequestsResponse: Decodable { let requests: [PendingRequest] }
 }

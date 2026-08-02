@@ -1,4 +1,5 @@
-import { Client, Databases, ID, Query, Users } from "node-appwrite";
+import { Client, Databases, ID, Query, Storage, Users } from "node-appwrite";
+import { InputFile } from "node-appwrite/file";
 import crypto from "node:crypto";
 import http2 from "node:http2";
 
@@ -22,8 +23,9 @@ export default async ({ req, res, log, error }) => {
     const client = new Client().setEndpoint(APPWRITE_ENDPOINT).setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID).setKey(apiKey);
     const databases = new Databases(client);
     const users = new Users(client);
+    const storage = new Storage(client);
 
-    const result = await handleAction(databases, users, payload, log);
+    const result = await handleAction(databases, users, storage, payload, log);
     return res.json({ ok: true, ...result });
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : "unknown_error";
@@ -32,7 +34,7 @@ export default async ({ req, res, log, error }) => {
   }
 };
 
-async function handleAction(databases, users, payload, log) {
+async function handleAction(databases, users, storage, payload, log) {
   switch (payload.action) {
     case "claimUsername":
       return claimUsername(databases, payload);
@@ -54,6 +56,8 @@ async function handleAction(databases, users, payload, log) {
       return updatePushToken(databases, payload);
     case "sendToFriend":
       return sendToFriend(databases, users, payload, log);
+    case "uploadImage":
+      return uploadImage(storage, payload);
     case "registerActivityUpdateToken":
       return registerActivityUpdateToken(databases, payload);
     default:
@@ -231,7 +235,7 @@ function sanitizedSnapshot(raw) {
   const number = (value, fallback) => (typeof value === "number" && Number.isFinite(value) ? value : fallback);
 
   return {
-    kind: raw.kind === "music" ? "music" : "note",
+    kind: raw.kind === "music" ? "music" : raw.kind === "image" ? "image" : "note",
     body: string(raw.body, "", 600),
     backgroundHex: string(raw.backgroundHex, "F6F6F7", 8),
     backgroundMode: raw.backgroundMode === "gradient" ? "gradient" : "plain",
@@ -265,8 +269,29 @@ function sanitizedSnapshot(raw) {
     musicShowsTitle: raw.musicShowsTitle !== false,
     musicShowsArtist: raw.musicShowsArtist !== false,
     musicShowsAlbum: raw.musicShowsAlbum !== false,
-    musicArtPosition: raw.musicArtPosition === "leading" ? "leading" : "trailing"
+    musicArtPosition: raw.musicArtPosition === "leading" ? "leading" : "trailing",
+    imageURL: string(raw.imageURL, "", 500)
   };
+}
+
+const IMAGES_BUCKET_ID = "images";
+const MAX_IMAGE_BYTES = 8_000_000;
+
+/// Uploads a `.image`-kind activity's background photo so it can actually reach a friend's
+/// device — raw bytes can't fit in the ~4KB push payload, so the client uploads here first and
+/// sends the resulting view URL as part of the snapshot instead (same pattern as Spotify's CDN
+/// URL for music album art, just self-hosted since there's no third-party CDN for a user photo).
+async function uploadImage(storage, payload) {
+  if (typeof payload.imageBase64 !== "string" || payload.imageBase64.length === 0) throw new Error("missing_image");
+  const buffer = Buffer.from(payload.imageBase64, "base64");
+  if (buffer.length === 0) throw new Error("missing_image");
+  if (buffer.length > MAX_IMAGE_BYTES) throw new Error("image_too_large");
+
+  const fileId = ID.unique();
+  const file = await storage.createFile(IMAGES_BUCKET_ID, fileId, InputFile.fromBuffer(buffer, `${fileId}.jpg`));
+  const projectId = process.env.APPWRITE_FUNCTION_PROJECT_ID;
+  const url = `${APPWRITE_ENDPOINT}/storage/buckets/${file.bucketId}/files/${file.$id}/view?project=${projectId}`;
+  return { url };
 }
 
 async function findActivityUpdateToken(databases, notificationID, recipientUserID) {
@@ -306,7 +331,9 @@ async function registerActivityUpdateToken(databases, payload) {
 async function sendToFriend(databases, users, payload, log) {
   const toUsername = normalizedUsername(payload.toUsername);
   if (typeof payload.fromUsername !== "string") throw new Error("missing_fromUsername");
-  if (typeof payload.message !== "string" || payload.message.trim().length === 0) throw new Error("missing_message");
+  // A message is optional — the friend's Live Activity content is the point, the message is just
+  // a caption alongside it.
+  if (typeof payload.message !== "string") throw new Error("missing_message");
   if (typeof payload.notificationID !== "string" || payload.notificationID.length === 0) throw new Error("missing_notificationID");
   const snapshot = sanitizedSnapshot(payload.snapshot);
   const message = payload.message.trim().slice(0, 120);

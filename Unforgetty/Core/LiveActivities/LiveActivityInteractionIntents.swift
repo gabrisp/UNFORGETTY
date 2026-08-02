@@ -69,6 +69,9 @@ struct FriendActivitySnapshot: Codable, Hashable {
     var musicShowsArtist: Bool = true
     var musicShowsAlbum: Bool = true
     var musicArtPosition: String = "trailing"
+    /// `.image`-kind only — uploaded to the "images" Storage bucket right before sending, since
+    /// raw bytes can't fit in the push payload (same reasoning as `musicAlbumArtURL`).
+    var imageURL: String?
 }
 
 /// A friend ping kept around after it arrives so it can still be opened later — separate from
