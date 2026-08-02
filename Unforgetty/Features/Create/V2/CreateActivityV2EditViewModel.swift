@@ -2,6 +2,24 @@ import SwiftUI
 import Combine
 import EventKit
 
+enum CardSource { case own, friends }
+
+/// Which sub-sheet is showing over the edit sheet — mutually exclusive by construction (unlike the
+/// three separate optionals/booleans this replaced, it's not possible to e.g. have the friend
+/// picker and the song picker both "on" at once).
+enum EditSubSheet: Equatable {
+    case liveAction(UUID)
+    case friendPicker
+    case songPicker
+}
+
+struct ScreenGeometry {
+    var isScrolledPastTop = false
+    var containerSize: CGSize = .zero
+    var safeArea: EdgeInsets = .init()
+    var minY: CGFloat = 0
+}
+
 @MainActor
 final class CreateActivityV2EditViewModel: DraftEditingViewModel, ObservableObject {
     @Published var activity: ScheduledActivity
@@ -102,6 +120,36 @@ final class CreateActivityV2EditViewModel: DraftEditingViewModel, ObservableObje
         isApplyingHistory = true
         load(next)
     }
+
+    // CreateActivityV2View's own screen-navigation state (which card is selected, which sub-sheet
+    // is showing, keyboard visibility, etc.) — consolidated here so that view has exactly one
+    // @StateObject and no loose @State scattered across it. This is also passed as @ObservedObject
+    // into a handful of sub-sheets (CreateActivityV2EditSheet, FriendPickerSheet, MusicPickerSheet,
+    // LiveActionItemEditSheet) that only read the activity-editing properties above — those sheets
+    // are only ever mounted while actively editing, when none of the properties below are changing,
+    // so folding them in here doesn't meaningfully widen those sheets' invalidation surface.
+    @Published var selectedActivity: ScheduledActivity?
+    @Published var presentedSheetActivity: ScheduledActivity?
+    @Published var isKeyboardVisible = false
+    /// Only the currently-selected card's height is ever needed (for the edit sheet's
+    /// presentationDetents) — a single scalar set once at selection time, not a dictionary written
+    /// continuously by every card's geometry reads. See CardAnimationSlot.
+    @Published var selectedCardHeight: CGFloat = 160
+    @Published var geometry = ScreenGeometry()
+    @Published var editSubSheet: EditSubSheet?
+    @Published var isShowingSettings = false
+    @Published var successMessage: String?
+    /// Friend pings are browsed in the same screen/NavigationStack — only the grid's data source
+    /// switches, via the toolbar's Stack/Friend menu — rather than navigating to a separate screen.
+    /// FriendCardsSection owns its own pings/selection state in its own view model, so browsing/
+    /// selecting/reloading/deleting a friend card only invalidates that smaller view, not this
+    /// whole screen — `isFriendPingSelected` is the one bit that has to flow back up here, since
+    /// the ScrollView/background/title need "is anything centered" regardless of which grid shows.
+    @Published var cardSource: CardSource = .own
+    @Published var isFriendPingSelected = false
+
+    var selectedActivityID: UUID? { selectedActivity?.id }
+    var isActivitySelected: Bool { selectedActivityID != nil }
 
     func setKind(_ kind: ActivityKind) {
         withAnimation(.snappy) {

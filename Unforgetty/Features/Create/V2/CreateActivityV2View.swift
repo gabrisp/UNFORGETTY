@@ -3,60 +3,32 @@ import SwiftUI
 import UIKit
 #endif
 
-private enum CardSource { case own, friends }
-
-/// Which sub-sheet is showing over the edit sheet — mutually exclusive by construction (unlike the
-/// three separate optionals/booleans this replaced, it's not possible to e.g. have the friend
-/// picker and the song picker both "on" at once).
-private enum EditSubSheet: Equatable {
-    case liveAction(UUID)
-    case friendPicker
-    case songPicker
-}
-
 struct CreateActivityV2View: View {
     @Binding var progress: CGFloat
     @EnvironmentObject private var store: ActivityStore
     @EnvironmentObject private var flow: AppFlowViewModel
     @Environment(\.colorScheme) private var colorScheme
+    // The one and only view model for this screen — CardSource/EditSubSheet/ScreenGeometry and all
+    // the selection/sheet/keyboard/geometry state that used to be loose @State directly on this
+    // view now live here too (see CreateActivityV2EditViewModel.swift), alongside the
+    // activity-being-edited state it already owned.
     @StateObject private var editViewModel = CreateActivityV2EditViewModel()
-    @State private var selectedActivity: ScheduledActivity?
-    @State private var presentedSheetActivity: ScheduledActivity?
-    @State private var isKeyboardVisible = false
-    // Only the currently-selected card's height is ever needed (for the edit sheet's
-    // presentationDetents) — a single scalar set once at selection time, not a dictionary written
-    // continuously by every card's geometry reads. See CardAnimationSlot.
-    @State private var selectedCardHeight: CGFloat = 160
-    @State private var info = Info()
-    @State private var editSubSheet: EditSubSheet?
-    @State private var isShowingSettings = false
-    @State private var successMessage: String?
-    // Friend pings are browsed in this SAME screen/NavigationStack — only the grid's data source
-    // switches, via the toolbar's Stack/Friend menu — rather than navigating to a separate screen,
-    // so the card-open animation (built around this view's own `info`/height-tracking state) never
-    // has to be reproduced or reconciled across two different view hierarchies. FriendCardsSection
-    // owns its own pings/selection state (in its own view model) so that browsing/selecting/
-    // reloading/deleting a friend card only invalidates that smaller view, not this whole one —
-    // `isFriendPingSelected` is the one bit that has to flow back up, since the ScrollView/
-    // background/title here need "is anything centered" regardless of which grid is showing.
-    @State private var cardSource: CardSource = .own
-    @State private var isFriendPingSelected = false
 
     var body: some View {
         NavigationStack {
             ScrollView(.vertical) {
                 LazyVStack(spacing: 12) {
-                    if cardSource == .own {
+                    if editViewModel.cardSource == .own {
                         ForEach(store.liveActivityCards) { activity in
                             SavedLiveActivityCardView(activity: activity)
                         }
                     } else {
                         FriendCardsSection(
-                            containerSize: info.containerSize,
+                            containerSize: editViewModel.geometry.containerSize,
                             animation: animation,
-                            isSelected: $isFriendPingSelected,
+                            isSelected: $editViewModel.isFriendPingSelected,
                             onReedit: { activity in
-                                cardSource = .own
+                                editViewModel.cardSource = .own
                                 withAnimation(animation) {
                                     select(activity)
                                 }
@@ -67,7 +39,7 @@ struct CreateActivityV2View: View {
             }
             .scrollIndicators(.hidden)
             .safeAreaPadding(15)
-            .scrollDisabled(isActivitySelected || isFriendPingSelected)
+            .scrollDisabled(isActivitySelected || editViewModel.isFriendPingSelected)
             .navigationTitle(isNavigationTitleHidden ? "" : "Unforgetty")
             .toolbarTitleDisplayMode(.inlineLarge)
             .toolbarBackground(.clear, for: .navigationBar)
@@ -117,7 +89,7 @@ struct CreateActivityV2View: View {
                 }
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    if isKeyboardVisible {
+                    if editViewModel.isKeyboardVisible {
                         Button {
                             Haptics.light()
                             dismissKeyboard()
@@ -126,7 +98,7 @@ struct CreateActivityV2View: View {
                         }
                     } else if showsEditingToolbarButtons {
                         activityKindMenu
-                    } else if !isActivitySelected && !isFriendPingSelected {
+                    } else if !isActivitySelected && !editViewModel.isFriendPingSelected {
                         cardSourceMenu
 
                         Button("Add", systemImage: "plus") {
@@ -135,7 +107,7 @@ struct CreateActivityV2View: View {
                                 select(store.createLiveActivityDraft())
                             }
                         }
-                        .disabled(cardSource != .own)
+                        .disabled(editViewModel.cardSource != .own)
 
                         Button("Upgrade", systemImage: "crown.fill") {
                             Haptics.medium()
@@ -148,7 +120,7 @@ struct CreateActivityV2View: View {
 
                         Button("Settings", systemImage: "gearshape") {
                             Haptics.light()
-                            isShowingSettings = true
+                            editViewModel.isShowingSettings = true
                         }
                     }
 
@@ -183,17 +155,17 @@ struct CreateActivityV2View: View {
             // `onScrollGeometryChange`'s `action` only fires when the *transformed* value changes —
             // transforming straight to the boolean this is actually used for (instead of the raw
             // offset) means it fires once per threshold crossing instead of on every scroll frame,
-            // which otherwise reassigned the whole `info` struct — and therefore invalidated this
-            // entire view — continuously while scrolling.
+            // which otherwise reassigned the whole `geometry` struct — and therefore invalidated
+            // this entire view — continuously while scrolling.
             .onScrollGeometryChange(for: Bool.self) {
                 ($0.contentOffset.y + $0.contentInsets.top) > 1
             } action: { _, newValue in
-                info.isScrolledPastTop = newValue
+                editViewModel.geometry.isScrolledPastTop = newValue
             }
             .onGeometryChange(for: CGFloat.self) {
                 $0.frame(in: .global).minY
             } action: { newValue in
-                info.minY = newValue - info.safeArea.top
+                editViewModel.geometry.minY = newValue - editViewModel.geometry.safeArea.top
             }
             .background {
                 screenBackground
@@ -214,49 +186,49 @@ struct CreateActivityV2View: View {
                         cutoutSendButton
                     }
                 )
-                .frame(height: max(84, info.safeArea.top + 36), alignment: .top)
+                .frame(height: max(84, editViewModel.geometry.safeArea.top + 36), alignment: .top)
             }
         }
         // Fills the same lower region the edit sheet occupies (same height math as its
         // presentationDetents below) so the success confirmation reads as "the sheet became this",
         // not as a banner popping in somewhere unrelated.
         .overlay(alignment: .bottom) {
-            if let successMessage {
+            if let successMessage = editViewModel.successMessage {
                 successBottomBanner(successMessage)
                     .frame(maxWidth: .infinity)
                     .frame(height: successZoneHeight, alignment: .center)
                     .transition(.opacity.combined(with: .scale(scale: 0.94)))
             }
         }
-        .sheet(isPresented: $isShowingSettings) {
+        .sheet(isPresented: $editViewModel.isShowingSettings) {
             SettingsView()
         }
-        .sheet(item: $presentedSheetActivity) { activity in
+        .sheet(item: $editViewModel.presentedSheetActivity) { activity in
             let spacing: CGFloat = 20
-            let isSafeAreaiPhone = info.safeArea.bottom > 0
-            let minSheetHeight = info.containerSize.height - info.minY - (selectedActivityHeight + spacing)
-            let maxSheetHeight = info.containerSize.height - info.minY + (isSafeAreaiPhone ? 15 : 10)
+            let isSafeAreaiPhone = editViewModel.geometry.safeArea.bottom > 0
+            let minSheetHeight = editViewModel.geometry.containerSize.height - editViewModel.geometry.minY - (selectedActivityHeight + spacing)
+            let maxSheetHeight = editViewModel.geometry.containerSize.height - editViewModel.geometry.minY + (isSafeAreaiPhone ? 15 : 10)
 
             Group {
-                if case .liveAction(let actionID) = editSubSheet {
+                if case .liveAction(let actionID) = editViewModel.editSubSheet {
                     LiveActionItemEditSheet(viewModel: editViewModel, actionID: actionID) {
                         withAnimation(.snappy) {
-                            editSubSheet = nil
+                            editViewModel.editSubSheet = nil
                         }
                     }
                     .environmentObject(store)
                     .transition(.blurReplace.combined(with: .opacity))
-                } else if editSubSheet == .friendPicker {
+                } else if editViewModel.editSubSheet == .friendPicker {
                     FriendPickerSheet(viewModel: editViewModel) {
                         withAnimation(.snappy) {
-                            editSubSheet = nil
+                            editViewModel.editSubSheet = nil
                         }
                     }
                     .transition(.blurReplace.combined(with: .opacity))
-                } else if editSubSheet == .songPicker {
+                } else if editViewModel.editSubSheet == .songPicker {
                     MusicPickerSheet(viewModel: editViewModel) {
                         withAnimation(.snappy) {
-                            editSubSheet = nil
+                            editViewModel.editSubSheet = nil
                         }
                     }
                     .environmentObject(store)
@@ -266,7 +238,7 @@ struct CreateActivityV2View: View {
                         .transition(.blurReplace.combined(with: .opacity))
                 }
             }
-            .animation(.snappy, value: editSubSheet)
+            .animation(.snappy, value: editViewModel.editSubSheet)
             .presentationDetents([.height(minSheetHeight), .height(maxSheetHeight)])
             .presentationBackgroundInteraction(.enabled(upThrough: .height(maxSheetHeight)))
             .interactiveDismissDisabled()
@@ -275,19 +247,19 @@ struct CreateActivityV2View: View {
         .onGeometryChange(for: CGSize.self) {
             $0.size
         } action: { newValue in
-            info.containerSize = newValue
+            editViewModel.geometry.containerSize = newValue
         }
         .onGeometryChange(for: EdgeInsets.self) {
             $0.safeAreaInsets
         } action: { newValue in
-            info.safeArea = newValue
+            editViewModel.geometry.safeArea = newValue
         }
         .onChange(of: editViewModel.activity) { oldValue, newValue in
-            guard selectedActivityID == newValue.id else { return }
+            guard editViewModel.selectedActivityID == newValue.id else { return }
             if editViewModel.isApplyingHistory {
-                selectedActivity = newValue
-                if presentedSheetActivity != nil {
-                    presentedSheetActivity = newValue
+                editViewModel.selectedActivity = newValue
+                if editViewModel.presentedSheetActivity != nil {
+                    editViewModel.presentedSheetActivity = newValue
                 }
                 editViewModel.saveDraft(store: store)
                 editViewModel.isApplyingHistory = false
@@ -302,13 +274,13 @@ struct CreateActivityV2View: View {
             if oldValue.id == newValue.id, oldValue != newValue {
                 editViewModel.saveDraft(store: store)
             }
-            selectedActivity = newValue
-            if presentedSheetActivity != nil && editSubSheet == nil {
-                presentedSheetActivity = newValue
+            editViewModel.selectedActivity = newValue
+            if editViewModel.presentedSheetActivity != nil && editViewModel.editSubSheet == nil {
+                editViewModel.presentedSheetActivity = newValue
             }
         }
         .background {
-            KeyboardVisibilityReader(isVisible: $isKeyboardVisible)
+            KeyboardVisibilityReader(isVisible: $editViewModel.isKeyboardVisible)
         }
         // "Reeditar" on a received friend ping (a separate tab) saves the new draft into `store`
         // then flags it here rather than reaching into this view's local state directly — the two
@@ -324,15 +296,15 @@ struct CreateActivityV2View: View {
 
     @ViewBuilder
     private func SavedLiveActivityCardView(activity: ScheduledActivity) -> some View {
-        let isCurrent = activity.id == selectedActivityID
+        let isCurrent = activity.id == editViewModel.selectedActivityID
 
         CardAnimationSlot(
             isCurrent: isCurrent,
             isAnySelected: isActivitySelected,
-            containerSize: info.containerSize,
+            containerSize: editViewModel.geometry.containerSize,
             animation: animation,
             onSelect: { height in select(activity, height: height) },
-            onCurrentHeightChange: { height in selectedCardHeight = height }
+            onCurrentHeightChange: { height in editViewModel.selectedCardHeight = height }
         ) {
             cardContent(activity: activity, isCurrent: isCurrent)
         }
@@ -359,9 +331,9 @@ struct CreateActivityV2View: View {
                 onEditLiveAction: presentLiveActionEditor,
                 onPickSong: {
                     Haptics.light()
-                    editSubSheet = .songPicker
+                    editViewModel.editSubSheet = .songPicker
                 },
-                isPickingSong: editSubSheet == .songPicker,
+                isPickingSong: editViewModel.editSubSheet == .songPicker,
                 isLiveActivity: isSelectedActivityLive,
                 onEndLiveActivity: endSelectedLiveActivity,
                 showsStatusPill: !isEditingSubsheet
@@ -381,10 +353,10 @@ struct CreateActivityV2View: View {
         editViewModel.clearHistory()
         editViewModel.load(activity)
         normalizeActivityTitle()
-        selectedActivity = editViewModel.activity
-        selectedCardHeight = height
-        if !isKeyboardVisible {
-            presentedSheetActivity = editViewModel.activity
+        editViewModel.selectedActivity = editViewModel.activity
+        editViewModel.selectedCardHeight = height
+        if !editViewModel.isKeyboardVisible {
+            editViewModel.presentedSheetActivity = editViewModel.activity
         }
     }
 
@@ -394,28 +366,28 @@ struct CreateActivityV2View: View {
         store.discardEmptyLiveActivityDraft(editViewModel.activity)
         editViewModel.clearHistory()
         withAnimation(animation) {
-            selectedActivity = nil
-            presentedSheetActivity = nil
+            editViewModel.selectedActivity = nil
+            editViewModel.presentedSheetActivity = nil
         }
     }
 
     private var showsEditingToolbarButtons: Bool {
-        isActivitySelected && editSubSheet == nil && !isKeyboardVisible && successMessage == nil
+        isActivitySelected && editViewModel.editSubSheet == nil && !editViewModel.isKeyboardVisible && editViewModel.successMessage == nil
     }
 
     private func switchCardSource(_ source: CardSource) {
-        guard cardSource != source else { return }
+        guard editViewModel.cardSource != source else { return }
         withAnimation(animation) {
-            cardSource = source
+            editViewModel.cardSource = source
         }
     }
 
     private var isEditingSubsheet: Bool {
-        editSubSheet != nil
+        editViewModel.editSubSheet != nil
     }
 
     private var editedLiveActionID: UUID? {
-        if case .liveAction(let id) = editSubSheet { return id }
+        if case .liveAction(let id) = editViewModel.editSubSheet { return id }
         return nil
     }
 
@@ -476,7 +448,7 @@ struct CreateActivityV2View: View {
     private var friendPickerButton: some View {
         Button {
             Haptics.light()
-            editSubSheet = .friendPicker
+            editViewModel.editSubSheet = .friendPicker
         } label: {
             Image(systemName: "person")
         }
@@ -508,7 +480,7 @@ struct CreateActivityV2View: View {
                 Label("Friend", systemImage: "person.2")
             }
         } label: {
-            Image(systemName: cardSource == .own ? "square.stack.fill" : "person.2")
+            Image(systemName: editViewModel.cardSource == .own ? "square.stack.fill" : "person.2")
         }
         .accessibilityLabel("Stack or Friend")
     }
@@ -593,7 +565,7 @@ struct CreateActivityV2View: View {
 
     private var successZoneHeight: CGFloat {
         let spacing: CGFloat = 20
-        return max(160, info.containerSize.height - info.minY - (selectedActivityHeight + spacing))
+        return max(160, editViewModel.geometry.containerSize.height - editViewModel.geometry.minY - (selectedActivityHeight + spacing))
     }
 
     private func successBottomBanner(_ message: String) -> some View {
@@ -650,14 +622,14 @@ struct CreateActivityV2View: View {
             // still on the editing screen at this point, not back in the list yet.
             await MainActor.run {
                 withAnimation(.snappy) {
-                    presentedSheetActivity = nil
-                    successMessage = message
+                    editViewModel.presentedSheetActivity = nil
+                    editViewModel.successMessage = message
                 }
             }
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             await MainActor.run {
                 withAnimation(.snappy) {
-                    successMessage = nil
+                    editViewModel.successMessage = nil
                 }
                 closeSelectedActivity()
             }
@@ -695,10 +667,10 @@ struct CreateActivityV2View: View {
 
     private func deleteActivity(_ activity: ScheduledActivity) {
         guard canDelete(activity) else { return }
-        if selectedActivityID == activity.id {
+        if editViewModel.selectedActivityID == activity.id {
             withAnimation(animation) {
-                selectedActivity = nil
-                presentedSheetActivity = nil
+                editViewModel.selectedActivity = nil
+                editViewModel.presentedSheetActivity = nil
             }
         }
 
@@ -721,7 +693,7 @@ struct CreateActivityV2View: View {
 
     private func presentLiveActionEditor(_ actionID: UUID) {
         withAnimation(.snappy) {
-            editSubSheet = .liveAction(actionID)
+            editViewModel.editSubSheet = .liveAction(actionID)
         }
     }
 
@@ -732,15 +704,11 @@ struct CreateActivityV2View: View {
     }
 
     private var isNavigationTitleHidden: Bool {
-        info.isScrolledPastTop || isActivitySelected || isFriendPingSelected
+        editViewModel.geometry.isScrolledPastTop || isActivitySelected || editViewModel.isFriendPingSelected
     }
 
     private var isActivitySelected: Bool {
-        selectedActivityID != nil
-    }
-
-    private var selectedActivityID: UUID? {
-        selectedActivity?.id
+        editViewModel.isActivitySelected
     }
 
     private var activityTitleBinding: Binding<String> {
@@ -772,12 +740,12 @@ struct CreateActivityV2View: View {
     }
 
     private var selectedActivityHeight: CGFloat {
-        selectedCardHeight
+        editViewModel.selectedCardHeight
     }
 
     @ViewBuilder
     private var screenBackground: some View {
-        if isActivitySelected || isFriendPingSelected {
+        if isActivitySelected || editViewModel.isFriendPingSelected {
             editingSurfaceBackground
                 .overlay(alignment: .topTrailing) {
                     editingBackgroundGlow
@@ -793,7 +761,7 @@ struct CreateActivityV2View: View {
     }
 
     private var editingSurfaceBackground: Color {
-        isActivitySelected || isFriendPingSelected ? .black : schemeBackground
+        isActivitySelected || editViewModel.isFriendPingSelected ? .black : schemeBackground
     }
 
     private var schemeBackground: Color {
@@ -876,22 +844,15 @@ struct CreateActivityV2View: View {
     }
 
     private var editingBackgroundGlowSize: CGFloat {
-        max(700, info.containerSize.width * 1.72)
+        max(700, editViewModel.geometry.containerSize.width * 1.72)
     }
 
     private var editingBottomBackgroundGlowSize: CGFloat {
-        max(640, info.containerSize.width * 1.58)
+        max(640, editViewModel.geometry.containerSize.width * 1.58)
     }
 
     private var animation: Animation {
         .interactiveSpring(response: 0.55, dampingFraction: 0.8)
-    }
-
-    private struct Info {
-        var isScrolledPastTop = false
-        var containerSize: CGSize = .zero
-        var safeArea: EdgeInsets = .init()
-        var minY: CGFloat = 0
     }
 }
 
