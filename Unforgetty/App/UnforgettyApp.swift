@@ -46,6 +46,32 @@ final class UnforgettyAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifi
     }
 }
 
+/// Live Activity buttons that need to open a different app (Spotify, Shortcuts, ...) can't do it
+/// directly — see WidgetContentStore.setPendingExternalLink's doc comment — so they launch this
+/// app and stash the real target URL for it to open once it actually has a full process. Checked
+/// on both cold launch and every foreground re-entry, since a tap can either launch the app fresh
+/// or just bring an already-running one forward.
+private struct PendingExternalLinkOpener: View {
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        Color.clear
+            .task {
+                openPendingLinkIfNeeded()
+            }
+            #if canImport(UIKit)
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                openPendingLinkIfNeeded()
+            }
+            #endif
+    }
+
+    private func openPendingLinkIfNeeded() {
+        guard let url = WidgetContentStore.consumePendingExternalLink() else { return }
+        openURL(url)
+    }
+}
+
 @main
 struct UnforgettyApp: App {
     #if canImport(UIKit)
@@ -87,6 +113,9 @@ struct UnforgettyApp: App {
                 }
                 .onOpenURL { url in
                     flow.handleOpenURL(url)
+                }
+                .background {
+                    PendingExternalLinkOpener()
                 }
                 .sheet(item: Binding(
                     get: { flow.presentedReceivedFriendPingID.flatMap { WidgetContentStore.receivedFriendPing(notificationID: $0) } },

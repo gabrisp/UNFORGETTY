@@ -346,6 +346,25 @@ nonisolated enum ImageDecodeCache {
 nonisolated enum WidgetContentStore {
     static let defaults = UserDefaults(suiteName: "group.com.gabrisp.Unforgetty") ?? .standard
 
+    private static let pendingExternalLinkKey = "pendingExternalLink.v1"
+
+    /// A Live Activity's `.widgetURL(_:)` only ever routes back into the containing app — it can't
+    /// open a different app (Spotify, Shortcuts, ...), and an interactive `Button(intent:)` whose
+    /// result chains into `OpenURLIntent` is not reliable for that either from a `LiveActivityIntent`
+    /// context. The mechanism that *does* work: the intent sets `openAppWhenRun = true` (guaranteeing
+    /// the app launches/foregrounds), stashes the real target URL here, and the app itself — which
+    /// has a full, unconstrained process — opens it via `openURL` on the next launch/foreground.
+    /// See PendingExternalLinkOpener in UnforgettyApp.swift for the read side.
+    static func setPendingExternalLink(_ urlString: String) {
+        defaults.set(urlString, forKey: pendingExternalLinkKey)
+    }
+
+    static func consumePendingExternalLink() -> URL? {
+        guard let urlString = defaults.string(forKey: pendingExternalLinkKey) else { return nil }
+        defaults.removeObject(forKey: pendingExternalLinkKey)
+        return URL(string: urlString)
+    }
+
     static func draft(for notificationID: String) -> WidgetDraft? {
         guard let data = defaults.data(forKey: "activities.v1") else { return nil }
         guard let values = try? JSONDecoder().decode([WidgetActivity].self, from: data) else { return nil }
@@ -501,7 +520,11 @@ nonisolated enum WidgetLiveActivityRefresher {
 
 nonisolated struct RunLiveActionIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Ejecutar acción"
-    static var openAppWhenRun = false
+    // `true` so tapping the tile reliably launches/foregrounds the app — see
+    // WidgetContentStore.setPendingExternalLink's doc comment for why this, rather than chaining
+    // straight to OpenURLIntent, is what actually gets the target URL (shortcuts://, a website, ...)
+    // to open.
+    static var openAppWhenRun = true
 
     @Parameter(title: "Tipo") var kind: String
     @Parameter(title: "Destino") var target: String
@@ -520,15 +543,39 @@ nonisolated struct RunLiveActionIntent: LiveActivityIntent {
     }
 
     func perform() async throws -> some IntentResult {
-        guard let url = LiveActionURLBuilder.url(
+        if let url = LiveActionURLBuilder.url(
             kind: kind,
             target: target,
             shortcutInput: shortcutInput.isEmpty ? nil : shortcutInput
-        ) else {
-            return .result()
+        ) {
+            WidgetContentStore.setPendingExternalLink(url.absoluteString)
         }
+        return .result()
+    }
+}
 
-        return .result(opensIntent: OpenURLIntent(url))
+/// Opens a plain URL (e.g. a Spotify track link) from a Live Activity tap — same
+/// launch-then-relay mechanism as RunLiveActionIntent above, kept as its own intent since its only
+/// input is a raw URL string rather than a live-action item's kind/target/shortcutInput shape.
+nonisolated struct OpenExternalLinkIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "Abrir enlace"
+    static var openAppWhenRun = true
+
+    @Parameter(title: "URL") var urlString: String
+
+    init() {
+        urlString = ""
+    }
+
+    init(urlString: String) {
+        self.urlString = urlString
+    }
+
+    func perform() async throws -> some IntentResult {
+        if !urlString.isEmpty {
+            WidgetContentStore.setPendingExternalLink(urlString)
+        }
+        return .result()
     }
 }
 

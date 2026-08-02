@@ -350,11 +350,10 @@ private struct FriendMusicSnapshotView: View {
                 }
             }
         }
-        .modifier(OptionalWidgetURL(url: playURL))
     }
 
     private var musicArtGroup: some View {
-        Group {
+        let art = Group {
             if let albumArtImage {
                 albumArtImage
                     .resizable()
@@ -373,6 +372,20 @@ private struct FriendMusicSnapshotView: View {
         .overlay {
             if snapshot.musicBorderEnabled {
                 musicClipShape(for: snapshot.musicLayout).stroke(Color(hex: snapshot.musicBorderHex), lineWidth: 3)
+            }
+        }
+
+        // Same reasoning as the own-draft music card: only the circle opens Spotify, via an
+        // AppIntent-backed tap target — the surrounding card keeps its plain `.widgetURL` to
+        // `unforgetty://friend-ping/...` (see the "Sent by" Link above) for everything else.
+        return Group {
+            if let playURL {
+                Button(intent: OpenExternalLinkIntent(urlString: playURL.absoluteString)) {
+                    art
+                }
+                .buttonStyle(.plain)
+            } else {
+                art
             }
         }
     }
@@ -615,7 +628,7 @@ private struct LockScreenActivityView: View {
     }
 
     private func musicArtGroup(for draft: WidgetDraft) -> some View {
-        Group {
+        let art = Group {
             if let image = widgetContentImage(from: draft.musicAlbumArtData) {
                 image
                     .resizable()
@@ -634,6 +647,21 @@ private struct LockScreenActivityView: View {
         .overlay {
             if draft.style.musicBorderEnabled == true {
                 musicClipShape(for: draft.style.musicLayout).stroke(Color(hex: draft.style.musicBorderHex ?? "FFFFFF"), lineWidth: 3)
+            }
+        }
+
+        // The circle is the one part of a music card that opens Spotify — a plain `.widgetURL` on
+        // the card can only route back into this app, so this needs its own AppIntent-backed tap
+        // target (see OpenExternalLinkIntent's doc comment for why it launches the app instead of
+        // chaining straight to a URL).
+        return Group {
+            if let spotifyURL = draft.musicSpotifyURL, !spotifyURL.isEmpty {
+                Button(intent: OpenExternalLinkIntent(urlString: spotifyURL)) {
+                    art
+                }
+                .buttonStyle(.plain)
+            } else {
+                art
             }
         }
     }
