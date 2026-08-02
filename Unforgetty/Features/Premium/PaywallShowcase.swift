@@ -29,6 +29,14 @@ enum PaywallShowcase {
         note("Walk the dog 🐕", gradientStart: "F6D365", gradientEnd: "FDA085", angle: 45, textHex: "3A2200", font: .rounded, alignment: .center)
     ]
 
+    static let cardsRowThree: [PaywallShowcaseCard] = [
+        note("Flight boards at 9:40", background: "0B1F3A", textHex: "BFE1FF", font: .rounded, alignment: .leading),
+        checklist(["Buy groceries 🛒", "Call the plumber"], background: "26331A", textHex: "E4FFB0", font: .rounded),
+        note("Deep work block 🧠", gradientStart: "1D2B64", gradientEnd: "F8CDDA", angle: 100, textHex: "0B0F2E", font: .serif, alignment: .center),
+        note("Passport expires soon", background: "2A0E0E", textHex: "FFB8B8", font: .monospaced, alignment: .leading),
+        note("Birthday: Alex 🎂", gradientStart: "FFDEE9", gradientEnd: "B5FFFC", angle: 60, textHex: "1A1A2E", font: .rounded, alignment: .center)
+    ]
+
     private static func note(
         _ text: String,
         background: String,
@@ -141,6 +149,13 @@ struct PaywallMarqueeShowcase: View {
                 // two rows don't start perfectly aligned.
                 leadingPadding: 48
             )
+            MarqueeRow(
+                cards: PaywallShowcase.cardsRowThree,
+                spacing: spacing,
+                speed: 27,
+                reversed: false,
+                leadingPadding: 24
+            )
         }
         .mask {
             LinearGradient(
@@ -220,12 +235,16 @@ private struct PaywallShowcaseCardView: View {
             allowsTapBlur: false,
             onToggleChecklistItem: checklistToggleHandler
         )
-        // Collapses back to intrinsic content size — ActivityContentView's internals use
+        // Collapses width back to intrinsic content size — ActivityContentView's internals use
         // `.frame(maxWidth: .infinity)` throughout (correct for its other, width-constrained call
         // sites), so without this the card would expand to fill whatever leftover space the
-        // marquee's HStack offers instead of sizing to its own text/art.
-        .fixedSize()
+        // marquee's HStack offers instead of sizing to its own text/art. Height stays fixed at
+        // 160 — the same height every real Live Activity card renders at elsewhere in the app
+        // (see ActivityPreviewView's liveActivityMaxHeight) — rather than intrinsic, so the
+        // showcase reads as "this is literally what your Live Activity looks like."
+        .fixedSize(horizontal: true, vertical: false)
         .padding(14)
+        .frame(height: 160)
         .activityCardBackground(style: draft.style, kind: draft.kind, cornerRadius: 20)
         .overlay(alignment: .top) {
             if isInteractive {
