@@ -8,43 +8,43 @@ struct PremiumView: View {
 
     var body: some View {
         NavigationStack {
-            // A genuine sibling layout, not an overlapping one — the footer used to be layered on
-            // top of the scroll content via ZStack(alignment: .bottom), which needed a manually
-            // measured Color.clear spacer at the bottom of the scroll content just to keep the
-            // footer from covering it. Any mismatch between that guessed/measured height and the
-            // real content let the scroll content visibly run into/behind the footer. A plain
-            // VStack sidesteps the whole problem: the footer takes exactly the space it needs, and
-            // the ScrollView gets whatever's left above it — no overlap possible, no spacer needed.
-            VStack(spacing: 0) {
-                ScrollView(.vertical) {
-                    VStack(spacing: 20) {
-                        PaywallMarqueeShowcase()
-                            .padding(.horizontal, -16)
-                            .padding(.top, 4)
-                            // The marquee's cards size to their own content (see PaywallShowcase's
-                            // MarqueeRow), so its true ideal width is 3 full sets of cards side by
-                            // side — hundreds of points wider than the screen, by design, since
-                            // that's what the infinite-scroll loop needs. `.frame(maxWidth: .infinity)`
-                            // further up this VStack does not cap that demand back down (it only
-                            // allows growth, it never shrinks), so this needs its own explicit clip
-                            // right at the source to stop it from inflating every ancestor's
-                            // reported width all the way up.
-                            .clipped()
+            // `.frame(maxWidth: .infinity)`/`.clipped()` further down were still letting the
+            // marquee's true (much wider than the screen) ideal width leak into how wide the
+            // ancestor VStack itself gets laid out — `maxWidth: .infinity` is an ALLOWANCE, not a
+            // cap, so any child free to report a bigger ideal size can still inflate it, and
+            // `.clipped()` only stops that view's own rendering from bleeding, not its reported
+            // size from propagating. `GeometryReader` sidesteps the ambiguity entirely: read the
+            // real, measured screen width once, then hard-lock every layer of this screen to
+            // exactly that value with `.frame(width:)` — a fixed width, unlike `maxWidth`, cannot
+            // be exceeded by anything inside it no matter what that content demands.
+            GeometryReader { proxy in
+                VStack(spacing: 0) {
+                    ScrollView(.vertical) {
+                        VStack(spacing: 20) {
+                            PaywallMarqueeShowcase()
+                                .padding(.horizontal, -16)
+                                .padding(.top, 4)
+                                .frame(width: proxy.size.width)
+                                .clipped()
 
-                        Image(systemName: store.isPremium ? "checkmark.seal.fill" : "sparkles")
-                            .font(.largeTitle)
-                            .foregroundStyle(.indigo)
-                        Text(store.isPremium ? "Premium activo" : "Unforgetty Premium").font(.title.bold())
-                        Text("Actividades y programaciones ilimitadas.").multilineTextAlignment(.center).foregroundStyle(.secondary)
+                            Image(systemName: store.isPremium ? "checkmark.seal.fill" : "sparkles")
+                                .font(.largeTitle)
+                                .foregroundStyle(.indigo)
+                            Text(store.isPremium ? "Premium activo" : "Unforgetty Premium").font(.title.bold())
+                            Text("Actividades y programaciones ilimitadas.").multilineTextAlignment(.center).foregroundStyle(.secondary)
+                        }
+                        .padding()
+                        .frame(width: proxy.size.width)
                     }
-                    .padding()
-                }
+                    .frame(width: proxy.size.width)
 
-                if !store.isPremium {
-                    bottomPurchaseOverlay
+                    if !store.isPremium {
+                        bottomPurchaseOverlay
+                            .frame(width: proxy.size.width)
+                    }
                 }
+                .frame(width: proxy.size.width, height: proxy.size.height)
             }
-            .frame(maxWidth: .infinity)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
