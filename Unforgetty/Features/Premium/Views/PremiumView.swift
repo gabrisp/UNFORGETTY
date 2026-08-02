@@ -138,10 +138,13 @@ private struct PaywallPackageCardView: View {
                 Text(package.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 (
                     Text(package.priceString).font(.title3.weight(.bold))
                     + Text(package.periodLabel).font(.footnote).foregroundStyle(.secondary)
                 )
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
@@ -156,15 +159,22 @@ private struct PaywallPackageCardView: View {
             )
         }
         .buttonStyle(.plain)
+        // Without an explicit maxWidth here, an un-truncatable child (the price text, before the
+        // lineLimit/minimumScaleFactor above) could force this whole card — and with it the
+        // footer's HStack — wider than the screen instead of sharing space with its sibling card.
+        .frame(maxWidth: .infinity)
         .overlay(alignment: .topTrailing) {
             if let trialLabel = package.trialLabel {
                 Text(trialLabel)
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(.white)
+                    .lineLimit(1)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(Color.green, in: .capsule)
-                    .offset(x: 6, y: -8)
+                    // Inset instead of poking outside the card's own bounds — an offset badge on
+                    // the rightmost card in the row could push past the footer's own edge.
+                    .padding(6)
             }
         }
     }

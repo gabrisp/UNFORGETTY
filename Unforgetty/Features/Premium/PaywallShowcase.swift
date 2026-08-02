@@ -16,12 +16,14 @@ enum PaywallShowcase {
         note("Gym at 6:30pm 🏋️", gradientStart: "FF6B6B", gradientEnd: "FFA36B", angle: 120, textHex: "1A0F0A", font: .rounded, alignment: .center),
         note("Call mom", background: "0F2A24", textHex: "9CFFE0", font: .serif, alignment: .leading),
         checklist(["Study session", "Chapter 4"], background: "3A1C71", textHex: "FFFFFF", font: .monospaced),
+        music(imageName: "prev_music_1", title: "Las Jordan", artist: "TINI", album: "Cupido", background: "241528", textHex: "FFFFFF"),
         note("Water the plants 🌱", background: "16342A", textHex: "B7F5C9", font: .rounded, alignment: .center)
     ]
 
     static let cardsRowTwo: [PaywallShowcaseCard] = [
         note("Team standup in 10 min", gradientStart: "0F2027", gradientEnd: "2C5364", angle: 135, textHex: "E6FBFF", font: .rounded, alignment: .leading),
         checklist(["Read 20 pages 📖", "Meditate 10 min"], background: "2B2113", textHex: "F3D9A6", font: .serif),
+        music(imageName: "prev_music_2", title: "Dealer", artist: "Corina Smith", album: "Menos Triste Más Mami", background: "1A1005", textHex: "FFD9A0"),
         note("Meditate 10 min 🧘", gradientStart: "FDCBF1", gradientEnd: "E6DEE9", angle: 90, textHex: "3A2A3D", font: .rounded, alignment: .center),
         note("Pay rent reminder", background: "1F1300", textHex: "FFD27D", font: .monospaced, alignment: .leading),
         note("Walk the dog 🐕", gradientStart: "F6D365", gradientEnd: "FDA085", angle: 45, textHex: "3A2200", font: .rounded, alignment: .center)
@@ -88,38 +90,41 @@ enum PaywallShowcase {
         draft.style.textSize = 17
         return PaywallShowcaseCard(draft: draft)
     }
+
+    /// Album art ships as static bundled preview images (`prev_music_1`/`prev_music_2` in
+    /// Assets.xcassets), loaded straight into `musicAlbumArtData` exactly like a real picked
+    /// Spotify track's downloaded art would be — no network call needed for a showcase.
+    private static func music(
+        imageName: String,
+        title: String,
+        artist: String,
+        album: String,
+        background: String,
+        textHex: String
+    ) -> PaywallShowcaseCard {
+        var draft = LiveActivityDraft()
+        draft.kind = .music
+        draft.musicTitle = title
+        draft.musicArtist = artist
+        draft.musicAlbum = album
+        draft.style.backgroundMode = .plain
+        draft.style.backgroundHex = background
+        draft.style.textHex = textHex
+        draft.style.textSize = 22
+        #if canImport(UIKit)
+        draft.musicAlbumArtData = UIImage(named: imageName)?.jpegData(compressionQuality: 0.9)
+        #endif
+        return PaywallShowcaseCard(draft: draft)
+    }
 }
 
 struct PaywallMarqueeShowcase: View {
-    // A note card's single line of text fits comfortably well under 90, but a checklist card's row
-    // height has a fixed 32pt-per-row floor (`ActivityContentView.checkbox`, shared with the real
-    // Live Activity, not something to shrink just for this compact showcase) — two rows plus their
-    // spacing and this card's own padding need ~108pt to actually fit without `.clipped()` cutting
-    // a row off.
-    private let cardHeight: CGFloat = 120
-    private let horizontalPadding: CGFloat = 16
     private let spacing: CGFloat = 14
-
-    // Reads the actual device screen width directly rather than a GeometryReader nested inside
-    // a parent that pads and then un-pads itself with a hardcoded negative value — that only
-    // works if the guess exactly matches the parent's real (system-default, not fixed) padding,
-    // which is fragile. This is exact regardless of what the parent around it does. Sized as a
-    // fraction of the screen (not full-width minus padding) so more than one card is visible at
-    // once — a marquee of one full-width card per "row position" doesn't read as a marquee.
-    private var cardWidth: CGFloat {
-        #if canImport(UIKit)
-        UIScreen.main.bounds.width * 0.42
-        #else
-        400 * 0.42
-        #endif
-    }
 
     var body: some View {
         VStack(spacing: spacing) {
             MarqueeRow(
                 cards: PaywallShowcase.cardsRowOne,
-                cardWidth: cardWidth,
-                cardHeight: cardHeight,
                 spacing: spacing,
                 speed: 24,
                 reversed: false,
@@ -127,17 +132,16 @@ struct PaywallMarqueeShowcase: View {
             )
             MarqueeRow(
                 cards: PaywallShowcase.cardsRowTwo,
-                cardWidth: cardWidth,
-                cardHeight: cardHeight,
                 spacing: spacing,
                 speed: 20,
                 reversed: true,
-                // Half a card-width (plus its spacing) so this row's cards sit centered on the
-                // seam between two cards in the row above — a staggered, interlocking look.
-                leadingPadding: (cardWidth + spacing) / 2
+                // A fixed stagger rather than half a card-width — cards now size to their own
+                // content (see MarqueeRow's doc comment), so there's no single "card width" left to
+                // derive a seam-aligned offset from. This is just a constant visual offset so the
+                // two rows don't start perfectly aligned.
+                leadingPadding: 48
             )
         }
-        .frame(height: cardHeight * 2 + spacing)
         .mask {
             LinearGradient(
                 stops: [
@@ -153,43 +157,57 @@ struct PaywallMarqueeShowcase: View {
     }
 }
 
+/// Each card sizes to its own content (short note text is a narrow card, a checklist with two
+/// longer items is a wider one) rather than a fixed width — so the infinite-scroll loop can't
+/// assume `cardCount * fixedWidth` for its wraparound math anymore. Instead this measures one
+/// full set's actual rendered width via `onGeometryChange` and uses that for the modulo/offset
+/// calculation; until that first measurement lands, the row just sits still (no offset) rather
+/// than guessing.
 private struct MarqueeRow: View {
     let cards: [PaywallShowcaseCard]
-    let cardWidth: CGFloat
-    let cardHeight: CGFloat
     let spacing: CGFloat
     let speed: Double
     let reversed: Bool
     let leadingPadding: CGFloat
 
-    private var setWidth: CGFloat { (cardWidth + spacing) * CGFloat(cards.count) }
+    @State private var setWidth: CGFloat = 0
 
     var body: some View {
         TimelineView(.animation) { timeline in
             let elapsed = timeline.date.timeIntervalSinceReferenceDate
-            let distance = CGFloat(elapsed * speed).truncatingRemainder(dividingBy: setWidth)
+            let distance = setWidth > 0 ? CGFloat(elapsed * speed).truncatingRemainder(dividingBy: setWidth) : 0
             let offset = reversed ? distance - setWidth : -distance
 
             HStack(spacing: spacing) {
                 ForEach(0..<3, id: \.self) { setIndex in
-                    ForEach(cards) { card in
-                        PaywallShowcaseCardView(card: card)
-                            .frame(width: cardWidth, height: cardHeight)
-                    }
+                    cardSet
+                        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newValue in
+                            if setIndex == 0 { setWidth = newValue }
+                        }
                 }
             }
             .padding(.leading, leadingPadding)
             .offset(x: offset)
+            .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(height: cardHeight)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
         .clipped()
+    }
+
+    private var cardSet: some View {
+        HStack(spacing: spacing) {
+            ForEach(cards) { card in
+                PaywallShowcaseCardView(card: card)
+            }
+        }
     }
 }
 
 private struct PaywallShowcaseCardView: View {
     let card: PaywallShowcaseCard
     @State private var draft: LiveActivityDraft
+    @State private var showsTapHint = false
 
     init(card: PaywallShowcaseCard) {
         self.card = card
@@ -202,9 +220,48 @@ private struct PaywallShowcaseCardView: View {
             allowsTapBlur: false,
             onToggleChecklistItem: checklistToggleHandler
         )
+        // Collapses back to intrinsic content size — ActivityContentView's internals use
+        // `.frame(maxWidth: .infinity)` throughout (correct for its other, width-constrained call
+        // sites), so without this the card would expand to fill whatever leftover space the
+        // marquee's HStack offers instead of sizing to its own text/art.
+        .fixedSize()
         .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .activityCardBackground(style: draft.style, kind: draft.kind, cornerRadius: 20)
+        .overlay(alignment: .top) {
+            if isInteractive {
+                tapHintBadge
+            }
+        }
+        .onAppear {
+            guard isInteractive else { return }
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.55).delay(0.7)) {
+                showsTapHint = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.2) {
+                withAnimation(.easeOut(duration: 0.35)) {
+                    showsTapHint = false
+                }
+            }
+        }
+    }
+
+    private var isInteractive: Bool { draft.kind == .check(.todoList) }
+
+    /// A one-time hint (never re-triggers — `showsTapHint` only ever flips on then off once per
+    /// card instance) nudging that the checklist cards, unlike the others in the marquee, actually
+    /// respond to a tap.
+    private var tapHintBadge: some View {
+        Text("TAP ME!")
+            .font(.system(size: 11, weight: .bold, design: .rounded))
+            .foregroundStyle(.black)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.yellow, in: .capsule)
+            .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+            .scaleEffect(showsTapHint ? 1 : 0.4)
+            .opacity(showsTapHint ? 1 : 0)
+            .offset(y: showsTapHint ? -16 : -6)
+            .allowsHitTesting(false)
     }
 
     private var checklistToggleHandler: ((UUID) -> Void)? {
@@ -217,4 +274,3 @@ private struct PaywallShowcaseCardView: View {
         draft.checklistItems[index].isCompleted.toggle()
     }
 }
-
