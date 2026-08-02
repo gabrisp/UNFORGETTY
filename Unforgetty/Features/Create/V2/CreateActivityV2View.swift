@@ -1,5 +1,4 @@
 import SwiftUI
-import ActivityKit
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -23,19 +22,18 @@ struct CreateActivityV2View: View {
     @State private var editedLiveAction: LiveActionSelection?
     @State private var isPickingFriends = false
     @State private var isPickingSong = false
-    @State private var undoStack: [ScheduledActivity] = []
-    @State private var redoStack: [ScheduledActivity] = []
-    @State private var isApplyingHistory = false
     @State private var isShowingSettings = false
     @State private var successMessage: String?
     // Friend pings are browsed in this SAME screen/NavigationStack — only the grid's data source
     // switches, via the toolbar's Stack/Friend menu — rather than navigating to a separate screen,
     // so the card-open animation (built around this view's own `info`/height-tracking state) never
-    // has to be reproduced or reconciled across two different view hierarchies.
+    // has to be reproduced or reconciled across two different view hierarchies. FriendCardsSection
+    // owns its own pings/selection state (in its own view model) so that browsing/selecting/
+    // reloading/deleting a friend card only invalidates that smaller view, not this whole one —
+    // `isFriendPingSelected` is the one bit that has to flow back up, since the ScrollView/
+    // background/title here need "is anything centered" regardless of which grid is showing.
     @State private var cardSource: CardSource = .own
-    @State private var receivedPings: [ReceivedFriendPing] = []
-    @State private var selectedFriendPing: ReceivedFriendPing?
-    @State private var selectedFriendCardHeight: CGFloat = 160
+    @State private var isFriendPingSelected = false
 
     var body: some View {
         NavigationStack {
@@ -46,9 +44,17 @@ struct CreateActivityV2View: View {
                             SavedLiveActivityCardView(activity: activity)
                         }
                     } else {
-                        ForEach(receivedPings) { ping in
-                            ReceivedPingCardView(ping: ping)
-                        }
+                        FriendCardsSection(
+                            containerSize: info.containerSize,
+                            animation: animation,
+                            isSelected: $isFriendPingSelected,
+                            onReedit: { activity in
+                                cardSource = .own
+                                withAnimation(animation) {
+                                    select(activity)
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -64,15 +70,6 @@ struct CreateActivityV2View: View {
                     if showsEditingToolbarButtons {
                         undoToolbarButton
                         redoToolbarButton
-                    }
-
-                    if isFriendPingSelected {
-                        Button {
-                            Haptics.light()
-                            closeSelectedFriendPing()
-                        } label: {
-                            Image(systemName: "xmark")
-                        }
                     }
 
 //                    if isActivitySelected && editedLiveAction == nil {
@@ -99,10 +96,6 @@ struct CreateActivityV2View: View {
                             .simultaneousGesture(TapGesture().onEnded { Haptics.light() })
                             .opacity(isEditingSubsheet ? 0 : 1)
                             .disabled(isEditingSubsheet)
-                    } else if let selectedFriendPing {
-                        Text("@\(selectedFriendPing.fromUsername)")
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(.white)
                     }
                 }
 
@@ -126,20 +119,7 @@ struct CreateActivityV2View: View {
                         }
                     } else if showsEditingToolbarButtons {
                         activityKindMenu
-                    } else if isFriendPingSelected {
-                        ToolbarIconButton(systemImage: "arrow.clockwise") {
-                            reloadSelectedFriendPing()
-                        }
-                        .frame(width: 32, height: 32)
-                        .accessibilityLabel("Reload")
-
-                        ToolbarIconMenu(systemImage: "ellipsis", items: [
-                            ToolbarMenuItem(title: "Copiar", systemImage: "doc.on.doc") { copySelectedFriendPing() },
-                            ToolbarMenuItem(title: "Reeditar", systemImage: "pencil") { reeditSelectedFriendPing() },
-                            ToolbarMenuItem(title: "Eliminar", systemImage: "trash", isDestructive: true) { deleteSelectedFriendPing() }
-                        ])
-                        .frame(width: 32, height: 32)
-                    } else if !isActivitySelected {
+                    } else if !isActivitySelected && !isFriendPingSelected {
                         cardSourceMenu
 
                         Button("Add", systemImage: "plus") {
@@ -299,13 +279,13 @@ struct CreateActivityV2View: View {
         }
         .onChange(of: editViewModel.activity) { oldValue, newValue in
             guard selectedActivityID == newValue.id else { return }
-            if isApplyingHistory {
+            if editViewModel.isApplyingHistory {
                 selectedActivity = newValue
                 if presentedSheetActivity != nil {
                     presentedSheetActivity = newValue
                 }
                 editViewModel.saveDraft(store: store)
-                isApplyingHistory = false
+                editViewModel.isApplyingHistory = false
                 return
             }
 
@@ -313,9 +293,8 @@ struct CreateActivityV2View: View {
             // onChange — same trap as normalizeActivityTitle above. Only persist (the expensive
             // full-store rewrite) when this is a genuine edit to the activity already open, not
             // whenever `.activity` merely changes for any reason including just switching selection.
+            editViewModel.recordEditIfNeeded(oldActivity: oldValue, newActivity: newValue)
             if oldValue.id == newValue.id, oldValue != newValue {
-                undoStack.append(oldValue)
-                redoStack.removeAll()
                 editViewModel.saveDraft(store: store)
             }
             selectedActivity = newValue
@@ -323,11 +302,9 @@ struct CreateActivityV2View: View {
                 presentedSheetActivity = newValue
             }
         }
-        .trackKeyboardVisibility(
-            isKeyboardVisible: $isKeyboardVisible,
-            presentedSheetActivity: $presentedSheetActivity,
-            selectedActivity: $selectedActivity
-        )
+        .background {
+            KeyboardVisibilityReader(isVisible: $isKeyboardVisible)
+        }
         // "Reeditar" on a received friend ping (a separate tab) saves the new draft into `store`
         // then flags it here rather than reaching into this view's local state directly — the two
         // tabs share no view hierarchy, only `store`/`flow`.
@@ -396,8 +373,7 @@ struct CreateActivityV2View: View {
     }
 
     private func select(_ activity: ScheduledActivity, height: CGFloat = 160) {
-        undoStack.removeAll()
-        redoStack.removeAll()
+        editViewModel.clearHistory()
         editViewModel.load(activity)
         normalizeActivityTitle()
         selectedActivity = editViewModel.activity
@@ -411,8 +387,7 @@ struct CreateActivityV2View: View {
         dismissKeyboard()
         normalizeActivityTitle()
         store.discardEmptyLiveActivityDraft(editViewModel.activity)
-        undoStack.removeAll()
-        redoStack.removeAll()
+        editViewModel.clearHistory()
         withAnimation(animation) {
             selectedActivity = nil
             presentedSheetActivity = nil
@@ -423,148 +398,11 @@ struct CreateActivityV2View: View {
         isActivitySelected && editedLiveAction == nil && !isPickingFriends && !isPickingSong && !isKeyboardVisible && successMessage == nil
     }
 
-    @ViewBuilder
-    private func ReceivedPingCardView(ping: ReceivedFriendPing) -> some View {
-        let isCurrent = ping.notificationID == selectedFriendPing?.notificationID
-
-        CardAnimationSlot(
-            isCurrent: isCurrent,
-            isAnySelected: isFriendPingSelected,
-            containerSize: info.containerSize,
-            animation: animation,
-            onSelect: { height in
-                selectedFriendPing = ping
-                selectedFriendCardHeight = height
-            },
-            onCurrentHeightChange: { height in selectedFriendCardHeight = height }
-        ) {
-            friendCardContent(ping: ping, isCurrent: isCurrent)
-        }
-        .contextMenu {
-            if !isFriendPingSelected {
-                Button(role: .destructive) {
-                    deleteFriendPing(ping)
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func friendCardContent(ping: ReceivedFriendPing, isCurrent: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if isCurrent {
-                Text("From @\(ping.fromUsername)")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-
-            ReceivedActivityPreviewView(snapshot: ping.snapshot)
-                .overlay(alignment: .topTrailing) {
-                    if !isCurrent {
-                        Text("Received from @\(ping.fromUsername) on \(Self.friendDateFormatter.string(from: ping.receivedAt))")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.75))
-                            .multilineTextAlignment(.trailing)
-                            .padding(.top, 10)
-                            .padding(.trailing, 12)
-                            .padding(.leading, 40)
-                    }
-                }
-
-            if isCurrent, let message = ping.message, !message.isEmpty {
-                Text("Message: \(message)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        // Never interactive (no text input, no buttons — the whole card's tap target is handled
-        // outside this content by CardAnimationSlot), so this is always safe to flatten.
-        .drawingGroup()
-    }
-
-    private static let friendDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "dd/MM/yyyy"
-        return formatter
-    }()
-
     private func switchCardSource(_ source: CardSource) {
         guard cardSource != source else { return }
         withAnimation(animation) {
             cardSource = source
         }
-        if source == .friends {
-            loadReceivedPings()
-        }
-    }
-
-    private func loadReceivedPings() {
-        receivedPings = WidgetContentStore.receivedFriendPings()
-        if let selectedFriendPing {
-            self.selectedFriendPing = receivedPings.first { $0.notificationID == selectedFriendPing.notificationID }
-        }
-    }
-
-    private func closeSelectedFriendPing() {
-        withAnimation(animation) {
-            selectedFriendPing = nil
-        }
-    }
-
-    /// `saveReceivedFriendPing` only ever writes once (idempotent against the widget's repeated
-    /// `.onAppear`), so a later `.update` push's changed content never lands here on its own —
-    /// this pulls the latest state from whatever Live Activity is actually still running.
-    private func reloadSelectedFriendPing() {
-        guard let selectedFriendPing else { return }
-        Haptics.light()
-        if
-            let activity = Activity<UnforgettyActivityAttributes>.activities.first(where: { $0.attributes.notificationID == selectedFriendPing.notificationID }),
-            let fromUsername = activity.content.state.fromUsername,
-            let snapshot = activity.content.state.friendSnapshot
-        {
-            WidgetContentStore.updateReceivedFriendPing(notificationID: selectedFriendPing.notificationID, fromUsername: fromUsername, message: activity.content.state.message, snapshot: snapshot)
-        }
-        loadReceivedPings()
-    }
-
-    private func copySelectedFriendPing() {
-        guard let selectedFriendPing else { return }
-        Haptics.light()
-        store.copiedEditions = ActivityEditionsClipboard(snapshot: selectedFriendPing.snapshot)
-    }
-
-    private func reeditSelectedFriendPing() {
-        guard let selectedFriendPing else { return }
-        Haptics.light()
-        let activity = ScheduledActivity(draft: LiveActivityDraft(snapshot: selectedFriendPing.snapshot), surface: .liveActivity, startDate: .now, status: .draft)
-        store.save(activity)
-        self.selectedFriendPing = nil
-        cardSource = .own
-        withAnimation(animation) {
-            select(activity)
-        }
-    }
-
-    private func deleteSelectedFriendPing() {
-        guard let selectedFriendPing else { return }
-        deleteFriendPing(selectedFriendPing)
-    }
-
-    private func deleteFriendPing(_ ping: ReceivedFriendPing) {
-        Haptics.light()
-        if selectedFriendPing?.notificationID == ping.notificationID {
-            withAnimation(animation) {
-                selectedFriendPing = nil
-            }
-        }
-        WidgetContentStore.deleteReceivedFriendPing(notificationID: ping.notificationID)
-        loadReceivedPings()
-    }
-
-    private var isFriendPingSelected: Bool {
-        selectedFriendPing != nil
     }
 
     private var isEditingSubsheet: Bool {
@@ -578,7 +416,7 @@ struct CreateActivityV2View: View {
         } label: {
             Image(systemName: "arrow.uturn.backward")
         }
-        .disabled(undoStack.isEmpty)
+        .disabled(!editViewModel.canUndo)
         .accessibilityLabel("Undo")
     }
 
@@ -589,7 +427,7 @@ struct CreateActivityV2View: View {
         } label: {
             Image(systemName: "arrow.uturn.forward")
         }
-        .disabled(redoStack.isEmpty)
+        .disabled(!editViewModel.canRedo)
         .accessibilityLabel("Redo")
     }
 
@@ -717,25 +555,15 @@ struct CreateActivityV2View: View {
         editViewModel.saveDraft(store: store)
     }
 
+    // editViewModel.undo()/redo() pop their own stacks and call load() internally, which fires
+    // .onChange(of: editViewModel.activity) above — its isApplyingHistory branch is what actually
+    // syncs selectedActivity/presentedSheetActivity to the replayed value.
     private func undoActivityChange() {
-        guard let previous = undoStack.popLast() else { return }
-        redoStack.append(editViewModel.activity)
-        applyHistoryActivity(previous)
+        editViewModel.undo()
     }
 
     private func redoActivityChange() {
-        guard let next = redoStack.popLast() else { return }
-        undoStack.append(editViewModel.activity)
-        applyHistoryActivity(next)
-    }
-
-    private func applyHistoryActivity(_ activity: ScheduledActivity) {
-        isApplyingHistory = true
-        editViewModel.load(activity)
-        selectedActivity = activity
-        if presentedSheetActivity != nil {
-            presentedSheetActivity = activity
-        }
+        editViewModel.redo()
     }
 
     private var cutoutSendButton: some View {
@@ -1070,7 +898,7 @@ private struct LiveActionSelection: Identifiable, Hashable {
 /// every frame. Only the currently-selected card's height is ever actually needed by the parent
 /// (for the edit sheet's `presentationDetents`), so that's handed up once, at selection time, via
 /// `onSelect`, rather than continuously.
-private struct CardAnimationSlot<Content: View>: View {
+struct CardAnimationSlot<Content: View>: View {
     let isCurrent: Bool
     let isAnySelected: Bool
     let containerSize: CGSize
@@ -1566,30 +1394,28 @@ private struct LiveActionItemEditSheet: View {
     }
 }
 
-private extension View {
-    // Dismissing presentedSheetActivity on keyboardWillShow used to close the ONLY sheet
-    // presentation (the edit sheet itself) the instant any TextField inside it became first
-    // responder — typing was structurally impossible in any text field the sheet contains.
-    @ViewBuilder
-    func trackKeyboardVisibility(
-        isKeyboardVisible: Binding<Bool>,
-        presentedSheetActivity: Binding<ScheduledActivity?>,
-        selectedActivity: Binding<ScheduledActivity?>
-    ) -> some View {
+/// Isolates the NotificationCenter subscription for keyboard visibility into its own tiny view
+/// (meant to be dropped into a `.background { }`) instead of chaining `.onReceive` directly onto
+/// a large view's modifier list — keeps the subscription's own lifecycle self-contained, separate
+/// from whatever big view happens to need the resulting value.
+private struct KeyboardVisibilityReader: View {
+    @Binding var isVisible: Bool
+
+    var body: some View {
         #if canImport(UIKit)
-        self
+        Color.clear
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 withAnimation(.snappy) {
-                    isKeyboardVisible.wrappedValue = true
+                    isVisible = true
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
                 withAnimation(.snappy) {
-                    isKeyboardVisible.wrappedValue = false
+                    isVisible = false
                 }
             }
         #else
-        self
+        Color.clear
         #endif
     }
 }

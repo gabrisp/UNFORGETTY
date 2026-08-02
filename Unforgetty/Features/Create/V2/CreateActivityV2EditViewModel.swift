@@ -64,6 +64,45 @@ final class CreateActivityV2EditViewModel: DraftEditingViewModel, ObservableObje
         errorMessage = nil
     }
 
+    // Undo/redo history for the activity currently open — lives here rather than as loose @State
+    // on CreateActivityV2View since this VM already owns `activity`, the thing being undone/redone.
+    // Doesn't reduce how often that view's body re-evaluates on its own (it's still one @StateObject
+    // subscription either way) — this is a cohesion/maintainability move, not a re-render-scope fix.
+    @Published private(set) var undoStack: [ScheduledActivity] = []
+    @Published private(set) var redoStack: [ScheduledActivity] = []
+    var canUndo: Bool { !undoStack.isEmpty }
+    var canRedo: Bool { !redoStack.isEmpty }
+    /// Set for the duration of an undo()/redo() replay so the caller's own activity-change observer
+    /// (which needs `activity`'s identity/content to sync its own state and persist real edits) can
+    /// tell "this came from undo/redo itself" apart from "this is a genuine new edit," and skip
+    /// re-recording the replayed value as a fresh undo entry.
+    var isApplyingHistory = false
+
+    func clearHistory() {
+        undoStack.removeAll()
+        redoStack.removeAll()
+    }
+
+    func recordEditIfNeeded(oldActivity: ScheduledActivity, newActivity: ScheduledActivity) {
+        guard oldActivity.id == newActivity.id, oldActivity != newActivity else { return }
+        undoStack.append(oldActivity)
+        redoStack.removeAll()
+    }
+
+    func undo() {
+        guard let previous = undoStack.popLast() else { return }
+        redoStack.append(activity)
+        isApplyingHistory = true
+        load(previous)
+    }
+
+    func redo() {
+        guard let next = redoStack.popLast() else { return }
+        undoStack.append(activity)
+        isApplyingHistory = true
+        load(next)
+    }
+
     func setKind(_ kind: ActivityKind) {
         withAnimation(.snappy) {
             draft.kind = kind
