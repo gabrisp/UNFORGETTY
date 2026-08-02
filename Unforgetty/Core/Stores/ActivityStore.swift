@@ -4,6 +4,19 @@ import EventKit
 import ActivityKit
 import CoreLocation
 
+/// RevenueCat-agnostic so `ActivityStore` doesn't need to import RevenueCat directly — populated
+/// from `Package`/`StoreProduct` inside `RevenueCatService`'s `#if canImport(RevenueCat)` branch,
+/// letting `PremiumView`'s package cards show real prices/trial length without the view (or this
+/// store's declaration) depending on the SDK being linked.
+struct PremiumPackageInfo: Identifiable, Hashable {
+    let productID: String
+    let title: String
+    let priceString: String
+    let periodLabel: String
+    let trialLabel: String?
+    var id: String { productID }
+}
+
 @MainActor
 final class ActivityStore: ObservableObject {
     @Published private(set) var activities: [ScheduledActivity] = CoreDataActivityStore.load() {
@@ -14,6 +27,7 @@ final class ActivityStore: ObservableObject {
     }
     @Published var isPremium = false
     @Published var purchaseError: String?
+    @Published var availablePackages: [PremiumPackageInfo] = []
     // Lives here (not as local @State in one screen) so "Copiar" on a received friend ping — a
     // separate tab/screen with no shared view hierarchy with the editor — can feed the same
     // clipboard the editor's own copy/paste-editions buttons read from.

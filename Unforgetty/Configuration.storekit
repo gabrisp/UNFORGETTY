@@ -1,0 +1,133 @@
+{
+  "identifier" : "CD2D3660-41FD-4379-AE79-69C802AE234D",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_applicationInternalID" : "0",
+    "_developerTeamID" : "0",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 0,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Purchase"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Verification"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Store Sync"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Subscription Status"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Transaction"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Manage Subscriptions Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Refund Request Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Offer Code Redeem Sheet"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "831C7197-FE3A-403B-94DB-4BE50839301B",
+      "localizations" : [],
+      "name" : "Premium",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "4.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "95CF525E-F886-4E26-9676-EA26CC5A1AFF",
+          "introductoryOffer" : {
+            "internalID" : "F0BA8502-D2F3-49AD-A53F-7DA5B8865424",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P3D"
+          },
+          "localizations" : [
+            {
+              "description" : "Actividades y programaciones ilimitadas, facturado mensualmente.",
+              "displayName" : "Premium Mensual",
+              "locale" : "es_ES"
+            },
+            {
+              "description" : "Unlimited activities and schedules, billed monthly.",
+              "displayName" : "Monthly Premium",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "unforgetty_premium_monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Premium Monthly",
+          "subscriptionGroupID" : "831C7197-FE3A-403B-94DB-4BE50839301B",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "39.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "33304B87-931C-4590-8A7A-B023CA112F60",
+          "introductoryOffer" : {
+            "internalID" : "C70BA95B-07B1-401A-9B1E-40847312B3FF",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P3D"
+          },
+          "localizations" : [
+            {
+              "description" : "Actividades y programaciones ilimitadas, facturado anualmente.",
+              "displayName" : "Premium Anual",
+              "locale" : "es_ES"
+            },
+            {
+              "description" : "Unlimited activities and schedules, billed yearly.",
+              "displayName" : "Yearly Premium",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "unforgetty_premium_yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Premium Yearly",
+          "subscriptionGroupID" : "831C7197-FE3A-403B-94DB-4BE50839301B",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

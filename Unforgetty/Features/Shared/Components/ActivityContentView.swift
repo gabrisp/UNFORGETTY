@@ -8,6 +8,10 @@ struct ActivityContentView: View {
     let draft: LiveActivityDraft
     var allowsTapBlur = true
     var allowsActions = false
+    /// Lets a caller (e.g. the paywall's interactive checklist showcase) make checklist rows
+    /// tappable without this shared view owning any mutable state itself — nil everywhere else,
+    /// so every other call site (the real Live Activity preview, saved-card list) is unaffected.
+    var onToggleChecklistItem: ((UUID) -> Void)?
     @Environment(\.isLuminanceReduced) private var isLuminanceReduced
     @State private var isTapBlurred = true
 
@@ -297,6 +301,9 @@ struct ActivityContentView: View {
         }
         .frame(maxWidth: .infinity, alignment: draft.style.contentAlignment)
         .contentShape(.rect)
+        .onTapGesture {
+            onToggleChecklistItem?(item.id)
+        }
     }
 
     private func checkbox(isCompleted: Bool) -> some View {

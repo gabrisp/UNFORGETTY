@@ -5,41 +5,43 @@ import UIKit
 
 struct PaywallShowcaseCard: Identifiable {
     let id = UUID()
-    let text: String
-    let style: ActivityStyle
+    let draft: LiveActivityDraft
 }
 
 enum PaywallShowcase {
     static let cards: [PaywallShowcaseCard] = [
-        card("Take your vitamins 💊", background: "1C1C28", textHex: "FFFFFF", font: .rounded, alignment: .leading),
-        card("Gym at 6:30pm 🏋️", gradientStart: "FF6B6B", gradientEnd: "FFA36B", angle: 120, textHex: "1A0F0A", font: .rounded, alignment: .center),
-        card("Call mom", background: "0F2A24", textHex: "9CFFE0", font: .serif, alignment: .leading),
-        card("Study session — Chapter 4", gradientStart: "3A1C71", gradientEnd: "6E44FF", angle: 60, textHex: "FFFFFF", font: .monospaced, alignment: .leading),
-        card("Water the plants 🌱", background: "16342A", textHex: "B7F5C9", font: .rounded, alignment: .center),
-        card("Team standup in 10 min", gradientStart: "0F2027", gradientEnd: "2C5364", angle: 135, textHex: "E6FBFF", font: .rounded, alignment: .leading),
-        card("Read 20 pages 📖", background: "2B2113", textHex: "F3D9A6", font: .serif, alignment: .leading),
-        card("Meditate 10 min 🧘", gradientStart: "FDCBF1", gradientEnd: "E6DEE9", angle: 90, textHex: "3A2A3D", font: .rounded, alignment: .center),
-        card("Pay rent reminder", background: "1F1300", textHex: "FFD27D", font: .monospaced, alignment: .leading),
-        card("Walk the dog 🐕", gradientStart: "F6D365", gradientEnd: "FDA085", angle: 45, textHex: "3A2200", font: .rounded, alignment: .center)
+        note("Take your vitamins 💊", background: "1C1C28", textHex: "FFFFFF", font: .rounded, alignment: .leading),
+        note("Gym at 6:30pm 🏋️", gradientStart: "FF6B6B", gradientEnd: "FFA36B", angle: 120, textHex: "1A0F0A", font: .rounded, alignment: .center),
+        note("Call mom", background: "0F2A24", textHex: "9CFFE0", font: .serif, alignment: .leading),
+        checklist(["Study session", "Chapter 4", "Review notes"], background: "3A1C71", textHex: "FFFFFF", font: .monospaced),
+        note("Water the plants 🌱", background: "16342A", textHex: "B7F5C9", font: .rounded, alignment: .center),
+        note("Team standup in 10 min", gradientStart: "0F2027", gradientEnd: "2C5364", angle: 135, textHex: "E6FBFF", font: .rounded, alignment: .leading),
+        checklist(["Read 20 pages 📖", "Meditate 10 min"], background: "2B2113", textHex: "F3D9A6", font: .serif),
+        note("Meditate 10 min 🧘", gradientStart: "FDCBF1", gradientEnd: "E6DEE9", angle: 90, textHex: "3A2A3D", font: .rounded, alignment: .center),
+        note("Pay rent reminder", background: "1F1300", textHex: "FFD27D", font: .monospaced, alignment: .leading),
+        note("Walk the dog 🐕", gradientStart: "F6D365", gradientEnd: "FDA085", angle: 45, textHex: "3A2200", font: .rounded, alignment: .center)
     ]
 
-    private static func card(
+    private static func note(
         _ text: String,
         background: String,
         textHex: String,
         font: ActivityStyle.FontChoice,
         alignment: ActivityStyle.TextAlignmentChoice
     ) -> PaywallShowcaseCard {
-        var style = ActivityStyle()
-        style.backgroundMode = .plain
-        style.backgroundHex = background
-        style.textHex = textHex
-        style.font = font
-        style.alignment = alignment
-        return PaywallShowcaseCard(text: text, style: style)
+        var draft = LiveActivityDraft()
+        draft.kind = .note
+        draft.body = text
+        draft.style.backgroundMode = .plain
+        draft.style.backgroundHex = background
+        draft.style.textHex = textHex
+        draft.style.font = font
+        draft.style.alignment = alignment
+        draft.style.textSize = 26
+        return PaywallShowcaseCard(draft: draft)
     }
 
-    private static func card(
+    private static func note(
         _ text: String,
         gradientStart: String,
         gradientEnd: String,
@@ -48,20 +50,43 @@ enum PaywallShowcase {
         font: ActivityStyle.FontChoice,
         alignment: ActivityStyle.TextAlignmentChoice
     ) -> PaywallShowcaseCard {
-        var style = ActivityStyle()
-        style.backgroundMode = .gradient
-        style.gradientStartHex = gradientStart
-        style.gradientEndHex = gradientEnd
-        style.gradientAngle = angle
-        style.textHex = textHex
-        style.font = font
-        style.alignment = alignment
-        return PaywallShowcaseCard(text: text, style: style)
+        var draft = LiveActivityDraft()
+        draft.kind = .note
+        draft.body = text
+        draft.style.backgroundMode = .gradient
+        draft.style.gradientStartHex = gradientStart
+        draft.style.gradientEndHex = gradientEnd
+        draft.style.gradientAngle = angle
+        draft.style.textHex = textHex
+        draft.style.font = font
+        draft.style.alignment = alignment
+        draft.style.textSize = 26
+        return PaywallShowcaseCard(draft: draft)
+    }
+
+    /// Rendered through the real `ActivityContentView` (like every other kind here), and wired up
+    /// to actually toggle on tap in `PaywallShowcaseCardView` — the paywall should show the app
+    /// doing something, not just a static mockup of it.
+    private static func checklist(
+        _ items: [String],
+        background: String,
+        textHex: String,
+        font: ActivityStyle.FontChoice
+    ) -> PaywallShowcaseCard {
+        var draft = LiveActivityDraft()
+        draft.kind = .check(.todoList)
+        draft.checklistItems = items.map { ChecklistItem(text: $0) }
+        draft.style.backgroundMode = .plain
+        draft.style.backgroundHex = background
+        draft.style.textHex = textHex
+        draft.style.font = font
+        draft.style.textSize = 17
+        return PaywallShowcaseCard(draft: draft)
     }
 }
 
 struct PaywallMarqueeShowcase: View {
-    private let cardHeight: CGFloat = 160
+    private let cardHeight: CGFloat = 90
     private let horizontalPadding: CGFloat = 16
     private let spacing: CGFloat = 14
 
@@ -152,16 +177,32 @@ private struct MarqueeRow: View {
 
 private struct PaywallShowcaseCardView: View {
     let card: PaywallShowcaseCard
+    @State private var draft: LiveActivityDraft
+
+    init(card: PaywallShowcaseCard) {
+        self.card = card
+        _draft = State(initialValue: card.draft)
+    }
 
     var body: some View {
-        Text(card.text)
-            .font(.system(size: 15, weight: .semibold, design: card.style.fontDesign))
-            .foregroundStyle(Color(hex: card.style.textHex))
-            .multilineTextAlignment(card.style.textAlignment)
-            .lineLimit(2)
-            .frame(maxWidth: .infinity, alignment: Alignment(horizontal: card.style.horizontalAlignment, vertical: .center))
-            .padding(14)
-            .activityCardBackground(style: card.style, kind: .note, cornerRadius: 20)
+        ActivityContentView(
+            draft: draft,
+            allowsTapBlur: false,
+            onToggleChecklistItem: checklistToggleHandler
+        )
+        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .activityCardBackground(style: draft.style, kind: draft.kind, cornerRadius: 20)
+    }
+
+    private var checklistToggleHandler: ((UUID) -> Void)? {
+        guard draft.kind == .check(.todoList) else { return nil }
+        return toggleChecklistItem
+    }
+
+    private func toggleChecklistItem(_ id: UUID) {
+        guard let index = draft.checklistItems.firstIndex(where: { $0.id == id }) else { return }
+        draft.checklistItems[index].isCompleted.toggle()
     }
 }
 
