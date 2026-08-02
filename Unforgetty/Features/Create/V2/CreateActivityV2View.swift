@@ -5,6 +5,15 @@ import UIKit
 
 private enum CardSource { case own, friends }
 
+/// Which sub-sheet is showing over the edit sheet — mutually exclusive by construction (unlike the
+/// three separate optionals/booleans this replaced, it's not possible to e.g. have the friend
+/// picker and the song picker both "on" at once).
+private enum EditSubSheet: Equatable {
+    case liveAction(UUID)
+    case friendPicker
+    case songPicker
+}
+
 struct CreateActivityV2View: View {
     @Binding var progress: CGFloat
     @EnvironmentObject private var store: ActivityStore
@@ -19,9 +28,7 @@ struct CreateActivityV2View: View {
     // continuously by every card's geometry reads. See CardAnimationSlot.
     @State private var selectedCardHeight: CGFloat = 160
     @State private var info = Info()
-    @State private var editedLiveAction: LiveActionSelection?
-    @State private var isPickingFriends = false
-    @State private var isPickingSong = false
+    @State private var editSubSheet: EditSubSheet?
     @State private var isShowingSettings = false
     @State private var successMessage: String?
     // Friend pings are browsed in this SAME screen/NavigationStack — only the grid's data source
@@ -231,25 +238,25 @@ struct CreateActivityV2View: View {
             let maxSheetHeight = info.containerSize.height - info.minY + (isSafeAreaiPhone ? 15 : 10)
 
             Group {
-                if let editedLiveAction {
-                    LiveActionItemEditSheet(viewModel: editViewModel, actionID: editedLiveAction.id) {
+                if case .liveAction(let actionID) = editSubSheet {
+                    LiveActionItemEditSheet(viewModel: editViewModel, actionID: actionID) {
                         withAnimation(.snappy) {
-                            self.editedLiveAction = nil
+                            editSubSheet = nil
                         }
                     }
                     .environmentObject(store)
                     .transition(.blurReplace.combined(with: .opacity))
-                } else if isPickingFriends {
+                } else if editSubSheet == .friendPicker {
                     FriendPickerSheet(viewModel: editViewModel) {
                         withAnimation(.snappy) {
-                            isPickingFriends = false
+                            editSubSheet = nil
                         }
                     }
                     .transition(.blurReplace.combined(with: .opacity))
-                } else if isPickingSong {
+                } else if editSubSheet == .songPicker {
                     MusicPickerSheet(viewModel: editViewModel) {
                         withAnimation(.snappy) {
-                            isPickingSong = false
+                            editSubSheet = nil
                         }
                     }
                     .environmentObject(store)
@@ -259,9 +266,7 @@ struct CreateActivityV2View: View {
                         .transition(.blurReplace.combined(with: .opacity))
                 }
             }
-            .animation(.snappy, value: editedLiveAction?.id)
-            .animation(.snappy, value: isPickingFriends)
-            .animation(.snappy, value: isPickingSong)
+            .animation(.snappy, value: editSubSheet)
             .presentationDetents([.height(minSheetHeight), .height(maxSheetHeight)])
             .presentationBackgroundInteraction(.enabled(upThrough: .height(maxSheetHeight)))
             .interactiveDismissDisabled()
@@ -298,7 +303,7 @@ struct CreateActivityV2View: View {
                 editViewModel.saveDraft(store: store)
             }
             selectedActivity = newValue
-            if presentedSheetActivity != nil && editedLiveAction == nil {
+            if presentedSheetActivity != nil && editSubSheet == nil {
                 presentedSheetActivity = newValue
             }
         }
@@ -350,13 +355,13 @@ struct CreateActivityV2View: View {
             // rasterized layer, or touch/keyboard input on the card being edited would break.
             SelectedActivityPreview(
                 viewModel: editViewModel,
-                selectedLiveActionID: editedLiveAction?.id,
+                selectedLiveActionID: editedLiveActionID,
                 onEditLiveAction: presentLiveActionEditor,
                 onPickSong: {
                     Haptics.light()
-                    isPickingSong = true
+                    editSubSheet = .songPicker
                 },
-                isPickingSong: isPickingSong,
+                isPickingSong: editSubSheet == .songPicker,
                 isLiveActivity: isSelectedActivityLive,
                 onEndLiveActivity: endSelectedLiveActivity,
                 showsStatusPill: !isEditingSubsheet
@@ -395,7 +400,7 @@ struct CreateActivityV2View: View {
     }
 
     private var showsEditingToolbarButtons: Bool {
-        isActivitySelected && editedLiveAction == nil && !isPickingFriends && !isPickingSong && !isKeyboardVisible && successMessage == nil
+        isActivitySelected && editSubSheet == nil && !isKeyboardVisible && successMessage == nil
     }
 
     private func switchCardSource(_ source: CardSource) {
@@ -406,7 +411,12 @@ struct CreateActivityV2View: View {
     }
 
     private var isEditingSubsheet: Bool {
-        editedLiveAction != nil || isPickingFriends || isPickingSong
+        editSubSheet != nil
+    }
+
+    private var editedLiveActionID: UUID? {
+        if case .liveAction(let id) = editSubSheet { return id }
+        return nil
     }
 
     private var undoToolbarButton: some View {
@@ -466,7 +476,7 @@ struct CreateActivityV2View: View {
     private var friendPickerButton: some View {
         Button {
             Haptics.light()
-            isPickingFriends = true
+            editSubSheet = .friendPicker
         } label: {
             Image(systemName: "person")
         }
@@ -711,7 +721,7 @@ struct CreateActivityV2View: View {
 
     private func presentLiveActionEditor(_ actionID: UUID) {
         withAnimation(.snappy) {
-            editedLiveAction = LiveActionSelection(id: actionID)
+            editSubSheet = .liveAction(actionID)
         }
     }
 
@@ -883,10 +893,6 @@ struct CreateActivityV2View: View {
         var safeArea: EdgeInsets = .init()
         var minY: CGFloat = 0
     }
-}
-
-private struct LiveActionSelection: Identifiable, Hashable {
-    let id: UUID
 }
 
 /// Wraps a card's tap-to-center animation + hit-testing/visibility math as a genuinely separate
