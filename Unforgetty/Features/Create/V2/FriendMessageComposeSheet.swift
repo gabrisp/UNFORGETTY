@@ -29,9 +29,11 @@ struct FriendMessageComposeSheet: View {
             .navigationTitle("Mensaje")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItemGroup(placement: .topBarLeading) {
-                    // Back to the recipient picker (step 1), not a full close — the recipient list
-                    // is still right there to adjust. X, separately, closes the whole flow.
+                // Back to the recipient picker (step 1), not a full close — the recipient list is
+                // still right there to adjust. X, separately, closes the whole flow. Kept as
+                // separate items (not one group) with a spacer between, so they don't read as one
+                // combined control.
+                ToolbarItem(placement: .topBarLeading) {
                     Button {
                         Haptics.light()
                         withAnimation(.snappy) {
@@ -40,7 +42,9 @@ struct FriendMessageComposeSheet: View {
                     } label: {
                         Image(systemName: "chevron.left")
                     }
-
+                }
+                ToolbarSpacer(.fixed, placement: .topBarLeading)
+                ToolbarItem(placement: .topBarLeading) {
                     Button(action: onDone) {
                         Image(systemName: "xmark")
                     }
