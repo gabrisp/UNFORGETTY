@@ -132,6 +132,7 @@ private struct FriendMessageTeaserView: View {
     let fromUsername: String
     let style: WidgetStyle
     let kind: String
+    var buttonColorHex: String = "FFCC00"
 
     var body: some View {
         VStack(spacing: 10) {
@@ -147,6 +148,7 @@ private struct FriendMessageTeaserView: View {
                     .padding(.vertical, 8)
             }
             .buttonStyle(.borderedProminent)
+            .tint(Color(hex: buttonColorHex))
         }
         .foregroundStyle(Color(hex: style.textHex))
         .frame(maxWidth: .infinity, maxHeight: 160)
@@ -198,7 +200,7 @@ private struct FriendSnapshotView: View {
     var body: some View {
         Group {
             if showsTeaser {
-                FriendMessageTeaserView(notificationID: notificationID, fromUsername: fromUsername, style: style, kind: "note")
+                FriendMessageTeaserView(notificationID: notificationID, fromUsername: fromUsername, style: style, kind: "note", buttonColorHex: snapshot.friendSendButtonColorHex)
             } else {
                 realContent
             }
@@ -305,7 +307,7 @@ private struct FriendMusicSnapshotView: View {
     var body: some View {
         Group {
             if showsTeaser {
-                FriendMessageTeaserView(notificationID: notificationID, fromUsername: fromUsername, style: style, kind: "music")
+                FriendMessageTeaserView(notificationID: notificationID, fromUsername: fromUsername, style: style, kind: "music", buttonColorHex: snapshot.friendSendButtonColorHex)
             } else {
                 realContent
             }
@@ -489,7 +491,7 @@ private struct FriendImageSnapshotView: View {
     var body: some View {
         Group {
             if showsTeaser {
-                FriendMessageTeaserView(notificationID: notificationID, fromUsername: fromUsername, style: style, kind: "image")
+                FriendMessageTeaserView(notificationID: notificationID, fromUsername: fromUsername, style: style, kind: "image", buttonColorHex: snapshot.friendSendButtonColorHex)
             } else {
                 realContent
             }

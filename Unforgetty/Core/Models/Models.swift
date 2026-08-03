@@ -476,6 +476,7 @@ extension ActivityStyle {
         musicShowsArtist = snapshot.musicShowsArtist
         musicShowsAlbum = snapshot.musicShowsAlbum
         musicArtPosition = MusicArtPosition(rawValue: snapshot.musicArtPosition) ?? .trailing
+        friendSendButtonColorHex = snapshot.friendSendButtonColorHex
     }
 }
 
@@ -592,7 +593,8 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
                 musicShowsTitle: style.musicShowsTitle,
                 musicShowsArtist: style.musicShowsArtist,
                 musicShowsAlbum: style.musicShowsAlbum,
-                musicArtPosition: style.musicArtPosition.rawValue
+                musicArtPosition: style.musicArtPosition.rawValue,
+                friendSendButtonColorHex: style.friendSendButtonColorHex
             )
         }
         if kind == .image {
@@ -615,7 +617,8 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
                 lineSpacingMultiplier: style.lineSpacingMultiplier,
                 borderHex: style.borderHex,
                 borderWidth: style.borderWidth,
-                imageURL: style.backgroundImageURL
+                imageURL: style.backgroundImageURL,
+                friendSendButtonColorHex: style.friendSendButtonColorHex
             )
         }
         return FriendActivitySnapshot(
@@ -635,7 +638,8 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
             verticalAlignment: style.verticalAlignment.rawValue,
             lineSpacingMultiplier: style.lineSpacingMultiplier,
             borderHex: style.borderHex,
-            borderWidth: style.borderWidth
+            borderWidth: style.borderWidth,
+            friendSendButtonColorHex: style.friendSendButtonColorHex
         )
     }
 }

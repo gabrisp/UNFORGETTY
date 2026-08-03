@@ -270,7 +270,8 @@ function sanitizedSnapshot(raw) {
     musicShowsArtist: raw.musicShowsArtist !== false,
     musicShowsAlbum: raw.musicShowsAlbum !== false,
     musicArtPosition: raw.musicArtPosition === "leading" ? "leading" : "trailing",
-    imageURL: string(raw.imageURL, "", 500)
+    imageURL: string(raw.imageURL, "", 500),
+    friendSendButtonColorHex: string(raw.friendSendButtonColorHex, "FFCC00", 8)
   };
 }
 

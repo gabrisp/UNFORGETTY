@@ -72,6 +72,11 @@ struct FriendActivitySnapshot: Codable, Hashable {
     /// `.image`-kind only — uploaded to the "images" Storage bucket right before sending, since
     /// raw bytes can't fit in the push payload (same reasoning as `musicAlbumArtURL`).
     var imageURL: String?
+    /// Mirrors `ActivityStyle.friendSendButtonColorHex` — the sender picks this alongside the
+    /// message in FriendPickerSheet, and it has to ride along in the snapshot to actually reach
+    /// the recipient's device: it tints the "Ver" button on `FriendMessageTeaserView`, the reveal
+    /// button shown in place of the real content while an attached message hasn't been tapped open.
+    var friendSendButtonColorHex: String = "FFCC00"
 }
 
 /// A friend ping kept around after it arrives so it can still be opened later — separate from
