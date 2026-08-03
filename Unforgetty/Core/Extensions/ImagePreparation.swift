@@ -10,8 +10,14 @@ enum ImagePreparation {
     // all in the real Live Activity even though they look fine in-app. Rather than hand-pick a
     // dimension/quality pair and hope it's small enough, shrink in a loop until the actual
     // encoded size is under the target — guarantees the ceiling instead of guessing at it.
-    private static let targetMaxBytes = 30_000
-    private static let startingMaxDimension: CGFloat = 300
+    // Raw image bytes never actually ride inside an APNs push payload in this app — own
+    // activities only ever push a notificationID (the widget re-reads the real content from
+    // local App Group storage), and friend pings ship an uploaded Storage URL, never embedded
+    // bytes (see FriendActivitySnapshot's doc comment). So this budget only trades off local
+    // decode memory against visual quality, not any transport limit — no need to be this
+    // aggressive.
+    private static let targetMaxBytes = 80_000
+    private static let startingMaxDimension: CGFloat = 640
     private static let maxIterations = 8
 
     static func preparedBackgroundImageData(from data: Data, targetMaxBytes: Int = Self.targetMaxBytes) -> Data {
@@ -23,7 +29,7 @@ enum ImagePreparation {
         // JPEG file size, so a low-detail full-resolution photo that happens to compress under
         // the byte target on the first pass would otherwise still decode at full resolution.
         var dimension = min(max(image.size.width, image.size.height), startingMaxDimension)
-        var quality: CGFloat = 0.6
+        var quality: CGFloat = 0.85
         var best = data
 
         for _ in 0..<maxIterations {
@@ -36,8 +42,8 @@ enum ImagePreparation {
             if encoded.count <= targetMaxBytes { break }
 
             // Still too big — shrink both dimension and quality for the next pass.
-            dimension *= 0.75
-            quality = max(0.2, quality - 0.15)
+            dimension *= 0.85
+            quality = max(0.4, quality - 0.1)
         }
         return best
         #else

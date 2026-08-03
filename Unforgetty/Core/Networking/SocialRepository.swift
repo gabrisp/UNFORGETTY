@@ -104,6 +104,7 @@ actor SocialRepository {
             "imageURL": snapshot.imageURL ?? "",
             "friendSendButtonColorHex": snapshot.friendSendButtonColorHex,
             "isDynamicIslandEnabled": snapshot.isDynamicIslandEnabled,
+            "imageOffsetY": snapshot.imageOffsetY,
             "body": snapshot.body,
             "backgroundHex": snapshot.backgroundHex,
             "backgroundMode": snapshot.backgroundMode,

@@ -247,6 +247,11 @@ private struct FriendSnapshotView: View {
         .foregroundStyle(Color(hex: style.textHex))
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: 160, alignment: style.contentAlignment)
+        // 160pt is the system's own Lock Screen Live Activity height cap, not a size this view
+        // chooses — note body + message together regularly exceed it, so clip rather than let
+        // the overflow bleed past the card's rounded corners (FriendImageSnapshotView already did
+        // this; the note/music variants were missing it).
+        .clipped()
         .widgetActivityBackground(style: style, kind: "note")
         .overlay(alignment: .topTrailing) {
             Text("Sent by @\(fromUsername)")
@@ -346,6 +351,9 @@ private struct FriendMusicSnapshotView: View {
         .foregroundStyle(Color(hex: style.textHex))
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: 160, alignment: style.contentAlignment)
+        // See the note variant's identical comment: 160pt is the system's Lock Screen cap, and
+        // art + title/artist/message together can exceed it — clip instead of overflowing.
+        .clipped()
         .widgetActivityBackground(style: style, kind: "music")
         .overlay(alignment: .topTrailing) {
             if let sheetURL = URL(string: "unforgetty://friend-ping/\(notificationID)") {
@@ -592,6 +600,20 @@ private struct OptionalWidgetURL: ViewModifier {
 /// The five content kinds the Dynamic Island's expanded region knows how to render — mirrors
 /// `ActivityKind`, but as its own switch since a friend snapshot only ever carries three of these
 /// (no `.todo`/`.actions` — checklists and live-action buttons aren't friend-sendable).
+/// The Dynamic Island always sits on the system's own dark material — unlike a card's own
+/// background (which the sender picked `textHex` to contrast against), the Island has no custom
+/// background at all here (see the type's doc comment: background is deliberately omitted for
+/// every kind). A dark `textHex` chosen for a light card would be unreadable on that dark
+/// backdrop, so anything too dark is forced to white specifically for Island rendering.
+private func dynamicIslandTextColor(hex: String) -> Color {
+    let value = UInt64(hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted), radix: 16) ?? 0
+    let red = Double((value >> 16) & 0xff) / 255
+    let green = Double((value >> 8) & 0xff) / 255
+    let blue = Double(value & 0xff) / 255
+    let luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+    return luminance < 0.4 ? .white : Color(hex: hex)
+}
+
 private enum DynamicIslandKind {
     case text, image, music, todo, actions
 
@@ -660,7 +682,7 @@ private struct DynamicIslandExpandedView: View {
         case .todo:
             todoContent(items: draft.checklistItems, style: draft.style)
         case .image:
-            imageContent(data: draft.style.backgroundImageData, textHex: draft.style.textHex)
+            imageContent(data: draft.style.backgroundImageData, offsetY: draft.style.imageOffsetY ?? 0, textHex: draft.style.textHex)
         case .music:
             musicContent(
                 title: (draft.musicTitle?.isEmpty ?? true) ? "Music" : draft.musicTitle!,
@@ -693,23 +715,39 @@ private struct DynamicIslandExpandedView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(Color(hex: snapshot.friendSendButtonColorHex))
             }
-            .foregroundStyle(Color(hex: snapshot.textHex))
+            .foregroundStyle(dynamicIslandTextColor(hex: snapshot.textHex))
             .padding(10)
         } else {
             let style = friendWidgetStyle(from: snapshot)
-            switch DynamicIslandKind(snapshotKind: snapshot.kind) {
-            case .music:
-                musicContent(
-                    title: (snapshot.musicTitle?.isEmpty ?? true) ? "Music" : snapshot.musicTitle!,
-                    artist: snapshot.musicArtist,
-                    albumArtData: WidgetContentStore.musicAlbumArt(notificationID: notificationID),
-                    spotifyURL: snapshot.musicSpotifyURL,
-                    style: style
-                )
-            case .image:
-                imageContent(data: WidgetContentStore.musicAlbumArt(notificationID: notificationID), textHex: snapshot.textHex)
-            default:
-                textContent(text: snapshot.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Note" : snapshot.body, style: style)
+            // Once revealed, the message has to keep being shown somewhere in the real content —
+            // unlike the Lock Screen's per-kind `realContent` (which already renders it as a
+            // caption line), the three content builders below take no `message` param, so without
+            // this the message would only ever have appeared in the pre-reveal teaser above and
+            // then vanish for good on this surface. Appended as a small caption under whichever
+            // kind's content is showing, matching the Lock Screen's inline-caption treatment.
+            VStack(spacing: 2) {
+                switch DynamicIslandKind(snapshotKind: snapshot.kind) {
+                case .music:
+                    musicContent(
+                        title: (snapshot.musicTitle?.isEmpty ?? true) ? "Music" : snapshot.musicTitle!,
+                        artist: snapshot.musicArtist,
+                        albumArtData: WidgetContentStore.musicAlbumArt(notificationID: notificationID),
+                        spotifyURL: snapshot.musicSpotifyURL,
+                        style: style
+                    )
+                case .image:
+                    imageContent(data: WidgetContentStore.musicAlbumArt(notificationID: notificationID), offsetY: style.imageOffsetY ?? 0, textHex: snapshot.textHex)
+                default:
+                    textContent(text: snapshot.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Note" : snapshot.body, style: style)
+                }
+
+                if let message = state.message, !message.isEmpty {
+                    Text(message)
+                        .font(.caption2)
+                        .foregroundStyle(dynamicIslandTextColor(hex: snapshot.textHex).opacity(0.7))
+                        .lineLimit(1)
+                        .padding(.bottom, 6)
+                }
             }
         }
     }
@@ -722,6 +760,7 @@ private struct DynamicIslandExpandedView: View {
             textSize: snapshot.textSize,
             alignment: snapshot.alignment,
             verticalAlignment: snapshot.verticalAlignment,
+            imageOffsetY: snapshot.imageOffsetY,
             musicLayout: snapshot.musicLayout
         )
     }
@@ -733,7 +772,7 @@ private struct DynamicIslandExpandedView: View {
             .font(.system(size: min(style.textSize, 22), weight: .medium, design: style.fontDesign))
             .multilineTextAlignment(style.textAlignment)
             .lineLimit(4)
-            .foregroundStyle(Color(hex: style.textHex))
+            .foregroundStyle(dynamicIslandTextColor(hex: style.textHex))
             .frame(maxWidth: .infinity, alignment: style.contentAlignment)
             .padding(10)
     }
@@ -751,22 +790,24 @@ private struct DynamicIslandExpandedView: View {
             }
         }
         .font(.system(size: min(style.textSize, 18), design: style.fontDesign))
-        .foregroundStyle(Color(hex: style.textHex))
+        .foregroundStyle(dynamicIslandTextColor(hex: style.textHex))
         .frame(maxWidth: .infinity, alignment: style.contentAlignment)
         .padding(10)
     }
 
     // No inset/avoidance for where the physical camera housing sits — full-bleed, simple padding.
-    private func imageContent(data: Data?, textHex: String) -> some View {
+    // Mirrors ActivityContentView's `.offset(y: draft.style.imageOffsetY)` so the crop the user
+    // dragged into place in the editor is the same crop shown here, not a re-centered default.
+    private func imageContent(data: Data?, offsetY: Double = 0, textHex: String) -> some View {
         Group {
             if let image = widgetContentImage(from: data) {
-                image.resizable().scaledToFill()
+                image.resizable().scaledToFill().offset(y: offsetY)
             } else {
                 ZStack {
                     Color.secondary.opacity(0.12)
                     Image(systemName: "photo")
                         .font(.title2.weight(.semibold))
-                        .foregroundStyle(Color(hex: textHex).opacity(0.55))
+                        .foregroundStyle(dynamicIslandTextColor(hex: textHex).opacity(0.55))
                 }
             }
         }
@@ -793,7 +834,7 @@ private struct DynamicIslandExpandedView: View {
                     ZStack {
                         Color.secondary.opacity(0.12)
                         Image(systemName: "music.note")
-                            .foregroundStyle(Color(hex: style.textHex).opacity(0.55))
+                            .foregroundStyle(dynamicIslandTextColor(hex: style.textHex).opacity(0.55))
                     }
                 }
             }
@@ -821,7 +862,7 @@ private struct DynamicIslandExpandedView: View {
 
             Spacer(minLength: 0)
         }
-        .foregroundStyle(Color(hex: style.textHex))
+        .foregroundStyle(dynamicIslandTextColor(hex: style.textHex))
         .padding(10)
     }
 
@@ -840,7 +881,7 @@ private struct DynamicIslandExpandedView: View {
                             .font(.caption2)
                             .lineLimit(1)
                     }
-                    .foregroundStyle(Color(hex: item.textHex))
+                    .foregroundStyle(dynamicIslandTextColor(hex: item.textHex))
                     .frame(maxWidth: .infinity)
                     .padding(8)
                 }
@@ -868,10 +909,10 @@ private struct DynamicIslandCompactIcon: View {
         Group {
             if let draft, draft.isDynamicIslandEnabled ?? true {
                 icon(for: DynamicIslandKind(widgetKind: draft.kind))
-                    .foregroundStyle(Color(hex: draft.style.textHex))
+                    .foregroundStyle(dynamicIslandTextColor(hex: draft.style.textHex))
             } else if draft == nil, let snapshot = state.friendSnapshot, snapshot.isDynamicIslandEnabled {
                 icon(for: DynamicIslandKind(snapshotKind: snapshot.kind))
-                    .foregroundStyle(Color(hex: snapshot.textHex))
+                    .foregroundStyle(dynamicIslandTextColor(hex: snapshot.textHex))
             } else {
                 EmptyView()
             }

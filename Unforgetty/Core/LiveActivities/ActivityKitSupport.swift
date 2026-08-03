@@ -174,7 +174,14 @@ enum LiveActivityController {
             return
         }
         NSLog("Unforgetty LiveActivityController.refresh: bumping phase for id=%@ notificationID=%@", id, activity.attributes.notificationID)
-        await activity.update(ActivityContent(state: UnforgettyActivityAttributes.ContentState(phase: UUID().uuidString, notificationID: activity.attributes.notificationID), staleDate: nil))
+        // Bump `phase` on the *current* state rather than constructing a blank one — a friend
+        // ping's content (`fromUsername`/`message`/`friendSnapshot`) lives entirely in the content
+        // state (see `FriendActivitySnapshot`'s doc comment), so rebuilding from scratch here used
+        // to silently wipe the message and snapshot the moment this ran against a friend-ping
+        // activity (e.g. the post-start settle Task below, or an edit-flow refresh call).
+        var state = activity.content.state
+        state.phase = UUID().uuidString
+        await activity.update(ActivityContent(state: state, staleDate: nil))
         NSLog("Unforgetty LiveActivityController.refresh: activity.update() returned for id=%@", id)
     }
 }

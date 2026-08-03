@@ -72,6 +72,9 @@ struct FriendActivitySnapshot: Codable, Hashable {
     /// `.image`-kind only — uploaded to the "images" Storage bucket right before sending, since
     /// raw bytes can't fit in the push payload (same reasoning as `musicAlbumArtURL`).
     var imageURL: String?
+    /// Mirrors `ActivityStyle.imageOffsetY` — the sender's chosen vertical pan/crop, so a friend's
+    /// device shows the same crop instead of re-centering the image by default.
+    var imageOffsetY: Double = 0
     /// Mirrors `ActivityStyle.friendSendButtonColorHex` — the sender picks this alongside the
     /// message in FriendPickerSheet, and it has to ride along in the snapshot to actually reach
     /// the recipient's device: it tints the "Ver" button on `FriendMessageTeaserView`, the reveal

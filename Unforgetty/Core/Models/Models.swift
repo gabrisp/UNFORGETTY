@@ -477,6 +477,7 @@ extension ActivityStyle {
         musicShowsAlbum = snapshot.musicShowsAlbum
         musicArtPosition = MusicArtPosition(rawValue: snapshot.musicArtPosition) ?? .trailing
         friendSendButtonColorHex = snapshot.friendSendButtonColorHex
+        imageOffsetY = snapshot.imageOffsetY
     }
 }
 
@@ -624,6 +625,7 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
                 borderHex: style.borderHex,
                 borderWidth: style.borderWidth,
                 imageURL: style.backgroundImageURL,
+                imageOffsetY: style.imageOffsetY,
                 friendSendButtonColorHex: style.friendSendButtonColorHex,
                 isDynamicIslandEnabled: isDynamicIslandEnabled
             )

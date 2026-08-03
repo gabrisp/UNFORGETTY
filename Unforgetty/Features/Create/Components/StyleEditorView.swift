@@ -170,13 +170,6 @@ struct StyleEditorView<VM: DraftEditingViewModel>: View {
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
-
-            // Applies regardless of kind — a per-activity choice (not a device-wide Settings
-            // toggle), carried along in FriendActivitySnapshot too so it's respected the same way
-            // whether this ends up as your own Live Activity or a friend's.
-            personalizationGroup("Dynamic Island") {
-                Toggle("Mostrar contenido", isOn: $viewModel.draft.isDynamicIslandEnabled)
-            }
         }
         .foregroundStyle(.white)
         .tint(.yellow)

@@ -50,6 +50,7 @@ struct CreateActivityV2EditSheet: View {
                             hideCompletedEditor
                         }
                         blurContentEditor
+                        dynamicIslandEditor
                         scheduleEditor
                         autoEndEditor
                     }
@@ -171,6 +172,32 @@ struct CreateActivityV2EditSheet: View {
                     ForEach(availableBlurContentModes) { mode in
                         Text(mode.title).tag(mode)
                     }
+                }
+                .pickerStyle(.segmented)
+            }
+        }
+    }
+
+    // Per-activity, not a device-wide Settings toggle — carried along in FriendActivitySnapshot
+    // too, so it's respected the same way whether this ends up as your own Live Activity or a
+    // friend's ping.
+    private var dynamicIslandEditor: some View {
+        settingsGroup {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Dynamic Island")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.58))
+                    .textCase(.uppercase)
+
+                Picker("Dynamic Island", selection: Binding(
+                    get: { viewModel.draft.isDynamicIslandEnabled },
+                    set: {
+                        viewModel.draft.isDynamicIslandEnabled = $0
+                        viewModel.saveDraft(store: store)
+                    }
+                )) {
+                    Text("Yes").tag(true)
+                    Text("No").tag(false)
                 }
                 .pickerStyle(.segmented)
             }

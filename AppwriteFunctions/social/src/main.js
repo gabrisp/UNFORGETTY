@@ -272,7 +272,10 @@ function sanitizedSnapshot(raw) {
     musicArtPosition: raw.musicArtPosition === "leading" ? "leading" : "trailing",
     imageURL: string(raw.imageURL, "", 500),
     friendSendButtonColorHex: string(raw.friendSendButtonColorHex, "FFCC00", 8),
-    isDynamicIslandEnabled: raw.isDynamicIslandEnabled !== false
+    isDynamicIslandEnabled: raw.isDynamicIslandEnabled !== false,
+    // Same non-optional-key rule as lineSpacingMultiplier above: must always be present or the
+    // recipient's decode throws silently and the ping never appears.
+    imageOffsetY: number(raw.imageOffsetY, 0)
   };
 }
 
