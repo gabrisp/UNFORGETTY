@@ -495,6 +495,10 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
     var isStrict = false
     var blurContentMode: BlurContentMode = .never
     var isContentBlurred = true
+    /// Per-activity, not a global app setting — whoever's watching this specific card decides
+    /// whether it shows content in the Dynamic Island. Applies the same way whether this is your
+    /// own activity or a friend's ping (carried in `FriendActivitySnapshot` for that case).
+    var isDynamicIslandEnabled = true
     var style = ActivityStyle()
     var musicTitle = ""
     var musicArtist = ""
@@ -525,7 +529,7 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, kind, title, body, noteIsCompleted, checklistItems, syncWithReminders, reminderListID, hideCompletedChecklistItems, liveActionItems, tags, isStrict, blurContentMode, isContentBlurred, style, musicTitle, musicArtist, musicAlbum, musicSpotifyTrackID, musicSpotifyURL, musicAlbumArtURL, musicAlbumArtData
+        case id, kind, title, body, noteIsCompleted, checklistItems, syncWithReminders, reminderListID, hideCompletedChecklistItems, liveActionItems, tags, isStrict, blurContentMode, isContentBlurred, isDynamicIslandEnabled, style, musicTitle, musicArtist, musicAlbum, musicSpotifyTrackID, musicSpotifyURL, musicAlbumArtURL, musicAlbumArtData
     }
 
     init() {}
@@ -546,6 +550,7 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
         isStrict = try container.decodeIfPresent(Bool.self, forKey: .isStrict) ?? false
         blurContentMode = try container.decodeIfPresent(BlurContentMode.self, forKey: .blurContentMode) ?? .never
         isContentBlurred = try container.decodeIfPresent(Bool.self, forKey: .isContentBlurred) ?? true
+        isDynamicIslandEnabled = try container.decodeIfPresent(Bool.self, forKey: .isDynamicIslandEnabled) ?? true
         style = try container.decodeIfPresent(ActivityStyle.self, forKey: .style) ?? ActivityStyle()
         musicTitle = try container.decodeIfPresent(String.self, forKey: .musicTitle) ?? ""
         musicArtist = try container.decodeIfPresent(String.self, forKey: .musicArtist) ?? ""
@@ -594,7 +599,8 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
                 musicShowsArtist: style.musicShowsArtist,
                 musicShowsAlbum: style.musicShowsAlbum,
                 musicArtPosition: style.musicArtPosition.rawValue,
-                friendSendButtonColorHex: style.friendSendButtonColorHex
+                friendSendButtonColorHex: style.friendSendButtonColorHex,
+                isDynamicIslandEnabled: isDynamicIslandEnabled
             )
         }
         if kind == .image {
@@ -618,7 +624,8 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
                 borderHex: style.borderHex,
                 borderWidth: style.borderWidth,
                 imageURL: style.backgroundImageURL,
-                friendSendButtonColorHex: style.friendSendButtonColorHex
+                friendSendButtonColorHex: style.friendSendButtonColorHex,
+                isDynamicIslandEnabled: isDynamicIslandEnabled
             )
         }
         return FriendActivitySnapshot(
@@ -639,7 +646,8 @@ struct LiveActivityDraft: Codable, Identifiable, Hashable {
             lineSpacingMultiplier: style.lineSpacingMultiplier,
             borderHex: style.borderHex,
             borderWidth: style.borderWidth,
-            friendSendButtonColorHex: style.friendSendButtonColorHex
+            friendSendButtonColorHex: style.friendSendButtonColorHex,
+            isDynamicIslandEnabled: isDynamicIslandEnabled
         )
     }
 }

@@ -77,6 +77,10 @@ struct FriendActivitySnapshot: Codable, Hashable {
     /// the recipient's device: it tints the "Ver" button on `FriendMessageTeaserView`, the reveal
     /// button shown in place of the real content while an attached message hasn't been tapped open.
     var friendSendButtonColorHex: String = "FFCC00"
+    /// Per-activity, mirroring `LiveActivityDraft.isDynamicIslandEnabled` — the sender's own choice
+    /// for whether this specific card shows content in the Dynamic Island, not a device-wide
+    /// setting on the recipient's end.
+    var isDynamicIslandEnabled: Bool = true
 }
 
 /// A friend ping kept around after it arrives so it can still be opened later — separate from
@@ -133,6 +137,7 @@ struct WidgetDraft: Codable {
     var isStrict: Bool
     var blurContentMode: String?
     var isContentBlurred: Bool?
+    var isDynamicIslandEnabled: Bool?
     var style: WidgetStyle
     var musicTitle: String?
     var musicArtist: String?
@@ -493,19 +498,6 @@ nonisolated enum WidgetContentStore {
         guard ids.insert(notificationID).inserted else { return }
         defaults.set(Array(ids), forKey: revealedFriendMessagesKey)
         defaults.synchronize()
-    }
-
-    /// Settings toggle controlling whether the Dynamic Island shows real content or stays empty
-    /// (this app's original v1 behavior). Defaults to enabled — absent key reads as `true`, not
-    /// `false`, so existing installs get the new content without visiting Settings first.
-    private static let dynamicIslandEnabledKey = "dynamicIslandEnabled.v1"
-
-    static func isDynamicIslandEnabled() -> Bool {
-        defaults.object(forKey: dynamicIslandEnabledKey) == nil ? true : defaults.bool(forKey: dynamicIslandEnabledKey)
-    }
-
-    static func setDynamicIslandEnabled(_ enabled: Bool) {
-        defaults.set(enabled, forKey: dynamicIslandEnabledKey)
     }
 
     private static func updateActivity(notificationID: String, mutate: (inout WidgetActivity) -> Void) {

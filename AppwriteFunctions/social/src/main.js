@@ -271,7 +271,8 @@ function sanitizedSnapshot(raw) {
     musicShowsAlbum: raw.musicShowsAlbum !== false,
     musicArtPosition: raw.musicArtPosition === "leading" ? "leading" : "trailing",
     imageURL: string(raw.imageURL, "", 500),
-    friendSendButtonColorHex: string(raw.friendSendButtonColorHex, "FFCC00", 8)
+    friendSendButtonColorHex: string(raw.friendSendButtonColorHex, "FFCC00", 8),
+    isDynamicIslandEnabled: raw.isDynamicIslandEnabled !== false
   };
 }
 

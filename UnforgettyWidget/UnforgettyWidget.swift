@@ -630,12 +630,18 @@ private struct DynamicIslandExpandedView: View {
 
     var body: some View {
         Group {
-            if !WidgetContentStore.isDynamicIslandEnabled() {
-                EmptyView()
-            } else if let draft {
-                ownContent(draft)
+            if let draft {
+                if draft.isDynamicIslandEnabled ?? true {
+                    ownContent(draft)
+                } else {
+                    EmptyView()
+                }
             } else if let fromUsername = state.fromUsername, let snapshot = state.friendSnapshot {
-                friendContent(fromUsername: fromUsername, snapshot: snapshot)
+                if snapshot.isDynamicIslandEnabled {
+                    friendContent(fromUsername: fromUsername, snapshot: snapshot)
+                } else {
+                    EmptyView()
+                }
             } else {
                 EmptyView()
             }
@@ -860,12 +866,10 @@ private struct DynamicIslandCompactIcon: View {
 
     var body: some View {
         Group {
-            if !WidgetContentStore.isDynamicIslandEnabled() {
-                EmptyView()
-            } else if let draft {
+            if let draft, draft.isDynamicIslandEnabled ?? true {
                 icon(for: DynamicIslandKind(widgetKind: draft.kind))
                     .foregroundStyle(Color(hex: draft.style.textHex))
-            } else if let snapshot = state.friendSnapshot {
+            } else if draft == nil, let snapshot = state.friendSnapshot, snapshot.isDynamicIslandEnabled {
                 icon(for: DynamicIslandKind(snapshotKind: snapshot.kind))
                     .foregroundStyle(Color(hex: snapshot.textHex))
             } else {
