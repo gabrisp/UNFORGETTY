@@ -23,6 +23,12 @@ struct PremiumView: View {
     // needs no presentation state at all, unlike redeemCode below.
     private static let termsOfUseURL = URL(string: "https://www.apple.com/legal/internetservices/itunes/dev/stdeula/")!
 
+    // PLACEHOLDER — example.com is the reserved example domain, not a real page. This has to be
+    // swapped for an actual hosted privacy policy before release: App Store review requires a
+    // working link here (separate from App Store Connect's own privacy policy field), and will
+    // reject/pull the app if it resolves to a placeholder or 404s.
+    private static let privacyPolicyURL = URL(string: "https://example.com")!
+
     /// `.offerCodeRedemption(isPresented:)` is a system StoreKit modifier that only takes a
     /// `Binding<Bool>` — this bridges it to `presentedSheet` instead of needing its own flag.
     private var isShowingOfferCodeRedemption: Binding<Bool> {
@@ -118,6 +124,7 @@ struct PremiumView: View {
                 }
 
                 Link("Términos", destination: Self.termsOfUseURL)
+                Link("Privacidad", destination: Self.privacyPolicyURL)
             }
             .buttonStyle(.plain)
             .font(.footnote)
