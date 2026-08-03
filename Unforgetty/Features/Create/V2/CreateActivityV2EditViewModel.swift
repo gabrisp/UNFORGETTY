@@ -330,8 +330,13 @@ final class CreateActivityV2EditViewModel: DraftEditingViewModel, ObservableObje
             // track "did the image actually change" separately.
             if draft.kind == .image, let imageData = draft.style.backgroundImageData {
                 do {
-                    let uploadData = ImagePreparation.preparedFriendUploadImageData(from: imageData)
-                    draft.style.backgroundImageURL = try await SocialRepository.shared.uploadImage(uploadData)
+                    // Uploaded as-is — it's already the ≤30KB copy prepared at pick time (see
+                    // ImagePreparation), which is plenty small/fast to transfer on its own. The
+                    // receiving device runs its own compression pass after downloading (see
+                    // FriendImageSnapshotView.fetchImageIfNeeded), so this end doesn't need to
+                    // guess at a stricter target — that's a decode-memory concern for whichever
+                    // device is actually about to render it, not an upload-time one.
+                    draft.style.backgroundImageURL = try await SocialRepository.shared.uploadImage(imageData)
                 } catch {
                     errorMessage = error.localizedDescription
                     return false

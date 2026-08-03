@@ -13,6 +13,7 @@
 		A20000000000000000000001 /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = A20000000000000000000002 /* RevenueCat */; };
 		A40000000000000000000001 /* Aptabase in Frameworks */ = {isa = PBXBuildFile; productRef = A40000000000000000000002 /* Aptabase */; };
 		A50000000000000000000002 /* Unforgetty/Core/LiveActivities/LiveActivityInteractionIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000001 /* Unforgetty/Core/LiveActivities/LiveActivityInteractionIntents.swift */; };
+		A50000000000000000000003 /* Unforgetty/Core/Extensions/ImagePreparation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000004 /* Unforgetty/Core/Extensions/ImagePreparation.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -46,6 +47,7 @@
 		A10000000000000000000004 /* UnforgettyWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = UnforgettyWidget.entitlements; sourceTree = "<group>"; };
 		A10000000000000000000018 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
 		A50000000000000000000001 /* Unforgetty/Core/LiveActivities/LiveActivityInteractionIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Unforgetty/Core/LiveActivities/LiveActivityInteractionIntents.swift; sourceTree = SOURCE_ROOT; };
+		A50000000000000000000004 /* Unforgetty/Core/Extensions/ImagePreparation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Unforgetty/Core/Extensions/ImagePreparation.swift; sourceTree = SOURCE_ROOT; };
 		EDD4A86B301A83900028BFCE /* Unforgetty.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Unforgetty.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -96,6 +98,7 @@
 			children = (
 				A10000000000000000000002 /* UnforgettyWidget.swift */,
 				A50000000000000000000001 /* Unforgetty/Core/LiveActivities/LiveActivityInteractionIntents.swift */,
+				A50000000000000000000004 /* Unforgetty/Core/Extensions/ImagePreparation.swift */,
 				A10000000000000000000003 /* Info.plist */,
 				A10000000000000000000004 /* UnforgettyWidget.entitlements */,
 				A10000000000000000000018 /* AppIntents.framework */,
@@ -230,6 +233,7 @@
 			files = (
 				A10000000000000000000005 /* UnforgettyWidget.swift in Sources */,
 				A50000000000000000000002 /* Unforgetty/Core/LiveActivities/LiveActivityInteractionIntents.swift in Sources */,
+				A50000000000000000000003 /* Unforgetty/Core/Extensions/ImagePreparation.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

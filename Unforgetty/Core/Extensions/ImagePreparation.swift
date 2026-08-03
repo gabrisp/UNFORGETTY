@@ -45,17 +45,6 @@ enum ImagePreparation {
         #endif
     }
 
-    /// A tighter re-compression pass applied only to the copy actually uploaded/downloaded for a
-    /// friend ping — independent of the 30KB cap above, which is sized for the Live Activity's
-    /// *local* decode-memory budget, not network/storage size. Reuses the same shrink-loop against
-    /// the already-~30KB-or-smaller local copy, so this is a cheap second pass, not starting over
-    /// from a full-resolution source.
-    static let friendUploadTargetMaxBytes = 3_000
-
-    static func preparedFriendUploadImageData(from data: Data) -> Data {
-        preparedBackgroundImageData(from: data, targetMaxBytes: friendUploadTargetMaxBytes)
-    }
-
     /// Two representative colors sampled from the top and bottom of the image (as hex strings, no
     /// `#`) — used to auto-derive a `.music` card's gradient from its album art. Draws into an
     /// explicit 1×2 RGBA8888 bitmap context rather than relying on a resizing renderer's default

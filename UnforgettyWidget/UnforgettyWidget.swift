@@ -553,7 +553,11 @@ private struct FriendImageSnapshotView: View {
         }
         guard let urlString = snapshot.imageURL, let url = URL(string: urlString) else { return }
         Task {
-            guard let (data, _) = try? await URLSession.shared.data(from: url) else { return }
+            guard let (downloaded, _) = try? await URLSession.shared.data(from: url) else { return }
+            // Whatever the sender uploaded, this device is the one about to decode it into a Live
+            // Activity's tight memory budget — re-run the same shrink-to-fit pass used for a local
+            // background image rather than trusting the upload was already small enough.
+            let data = ImagePreparation.preparedBackgroundImageData(from: downloaded)
             WidgetContentStore.saveMusicAlbumArt(notificationID: notificationID, data: data)
             await MainActor.run {
                 imageData = data
