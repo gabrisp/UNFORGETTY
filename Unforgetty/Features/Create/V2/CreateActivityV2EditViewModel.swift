@@ -10,7 +10,34 @@ enum CardSource { case own, friends }
 enum EditSubSheet: Equatable {
     case liveAction(UUID)
     case friendPicker
+    /// The second step of the friend-send flow — reached from `friendPicker`'s confirm button
+    /// (only enabled once at least one recipient is picked), not from its own toolbar button.
+    case friendMessage
     case songPicker
+}
+
+/// A lightweight, device-local "recently sent to" list for the friend picker's Recent section —
+/// not synced anywhere, just a UX convenience for whoever composes on this device. Recorded after
+/// a successful send (see CreateActivityV2EditViewModel.send()), most-recent-first, deduplicated.
+enum RecentFriendRecipients {
+    private static let key = "recentFriendRecipients.v1"
+    private static let maxCount = 10
+
+    static func recent() -> [String] {
+        UserDefaults.standard.stringArray(forKey: key) ?? []
+    }
+
+    static func record(_ usernames: [String]) {
+        var current = recent()
+        for username in usernames.reversed() {
+            current.removeAll { $0 == username }
+            current.insert(username, at: 0)
+        }
+        if current.count > maxCount {
+            current = Array(current.prefix(maxCount))
+        }
+        UserDefaults.standard.set(current, forKey: key)
+    }
 }
 
 struct ScreenGeometry {
@@ -351,6 +378,7 @@ final class CreateActivityV2EditViewModel: DraftEditingViewModel, ObservableObje
                 for toUsername in sendToFriendUsernames {
                     try await SocialRepository.shared.sendToFriend(fromUsername: myUsername, toUsername: toUsername, message: trimmedMessage, notificationID: notificationID, snapshot: snapshot)
                 }
+                RecentFriendRecipients.record(sendToFriendUsernames)
                 friendMessage = ""
                 EventTracker.track("friend_ping_sent")
                 return true

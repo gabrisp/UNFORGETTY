@@ -1,8 +1,16 @@
 import SwiftUI
 
+/// Step 1 of the friend-send flow: pick who to send to. The search field sits bare at the top,
+/// outside any boxed section (matching MusicPickerSheet's layout, not the old boxed-in version).
+/// While not actively searching, friends are split into three sections — Seleccionados (only
+/// shown once at least one is picked), Recientes (device-local "sent to before" history), and
+/// Todos (everyone else, capped) — tapping a row in Recientes/Todos moves it into Seleccionados,
+/// tapping it there moves it back out. The X cancels the whole flow; the checkmark (only enabled
+/// with at least one recipient selected) advances to step 2 (`FriendMessageComposeSheet`), where
+/// the message and send-button color are actually set.
 struct FriendPickerSheet: View {
     @ObservedObject var viewModel: CreateActivityV2EditViewModel
-    let onDone: () -> Void
+    let onCancel: () -> Void
 
     @State private var usernameInput = ""
     @State private var isClaimingUsername = false
@@ -15,7 +23,7 @@ struct FriendPickerSheet: View {
     @State private var requestStatusMessage: String?
     @State private var errorMessage: String?
 
-    private let friendsDisplayLimit = 20
+    private let sectionDisplayLimit = 10
 
     var body: some View {
         NavigationStack {
@@ -24,18 +32,16 @@ struct FriendPickerSheet: View {
                     if viewModel.myUsername == nil {
                         claimUsernameSection
                     } else {
+                        searchField
+
                         if !pendingRequests.isEmpty {
                             requestsSection
                         }
-                        friendsSection
 
-                        if !viewModel.sendToFriendUsernames.isEmpty {
-                            editorSection("Mensaje (opcional)") {
-                                TextField("Escribe algo…", text: $viewModel.friendMessage, axis: .vertical)
-                                    .lineLimit(1...4)
-
-                                ColorPicker("Color del botón de enviar", selection: viewModel.hexBinding(\.friendSendButtonColorHex), supportsOpacity: false)
-                            }
+                        if isSearching {
+                            searchResultsSection
+                        } else {
+                            browsingSections
                         }
                     }
 
@@ -50,11 +56,22 @@ struct FriendPickerSheet: View {
             .navigationTitle("Enviar a un amigo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(action: onCancel) {
+                        Image(systemName: "xmark")
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(action: onDone) {
+                    Button {
+                        Haptics.light()
+                        withAnimation(.snappy) {
+                            viewModel.editSubSheet = .friendMessage
+                        }
+                    } label: {
                         Image(systemName: "checkmark")
                     }
                     .buttonStyle(.glassProminent)
+                    .disabled(viewModel.sendToFriendUsernames.isEmpty)
                 }
             }
         }
@@ -75,6 +92,24 @@ struct FriendPickerSheet: View {
             guard !Task.isCancelled else { return }
             lookupResult = try? await SocialRepository.shared.lookupUsername(trimmed)
         }
+    }
+
+    private var isSearching: Bool {
+        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var searchField: some View {
+        TextField("Buscar por username", text: $query)
+            .textFieldStyle(.plain)
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 46)
+            .background(.white.opacity(0.1), in: .rect(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(.white.opacity(0.14), lineWidth: 1)
+            }
     }
 
     private var claimUsernameSection: some View {
@@ -133,50 +168,95 @@ struct FriendPickerSheet: View {
         }
     }
 
-    private var friendsSection: some View {
-        editorSection("Amigos (máx \(CreateActivityV2EditViewModel.maxFriendRecipients))") {
-            TextField("Buscar por username", text: $query)
-                .textFieldStyle(.plain)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .padding(.horizontal, 14)
-                .frame(minHeight: 46)
-                .background(.white.opacity(0.1), in: .rect(cornerRadius: 12, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(.white.opacity(0.14), lineWidth: 1)
+    // MARK: - Browsing (query empty): Seleccionados / Recientes / Todos
+
+    @ViewBuilder
+    private var browsingSections: some View {
+        if viewModel.friends.isEmpty {
+            Text("Todavía no tienes amigos. Búscalos arriba por username.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+
+        if !selectedFriends.isEmpty {
+            editorSection("Seleccionados (\(selectedFriends.count)/\(CreateActivityV2EditViewModel.maxFriendRecipients))") {
+                friendRows(selectedFriends)
+            }
+        }
+
+        if !recentFriends.isEmpty {
+            editorSection("Recientes") {
+                friendRows(recentFriends)
+            }
+        }
+
+        if !remainingFriends.isEmpty {
+            editorSection("Todos") {
+                friendRows(Array(remainingFriends.prefix(sectionDisplayLimit)))
+
+                if remainingFriends.count > sectionDisplayLimit {
+                    Text("+\(remainingFriends.count - sectionDisplayLimit) más — busca por username para encontrarlos")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
+            }
+        }
+    }
 
-            if viewModel.friends.isEmpty, lookupResult == nil {
-                Text("Todavía no tienes amigos. Búscalos arriba por username.")
+    private var selectedFriends: [SocialRepository.Friend] {
+        viewModel.sendToFriendUsernames.compactMap { username in
+            viewModel.friends.first { $0.username == username }
+        }
+    }
+
+    private var recentFriends: [SocialRepository.Friend] {
+        let selectedUsernames = Set(viewModel.sendToFriendUsernames)
+        let recentUsernames = RecentFriendRecipients.recent()
+        return recentUsernames.compactMap { username in
+            guard !selectedUsernames.contains(username) else { return nil }
+            return viewModel.friends.first { $0.username == username }
+        }
+    }
+
+    private var remainingFriends: [SocialRepository.Friend] {
+        let excluded = Set(viewModel.sendToFriendUsernames).union(recentFriends.map(\.username))
+        return viewModel.friends.filter { !excluded.contains($0.username) }
+    }
+
+    private func friendRows(_ friends: [SocialRepository.Friend]) -> some View {
+        ForEach(friends) { friend in
+            friendRow(friend)
+
+            if friend.id != friends.last?.id {
+                Divider().overlay(.white.opacity(0.1))
+            }
+        }
+    }
+
+    // MARK: - Searching (query non-empty): flat filtered list + add-new-friend prompt
+
+    private var searchResultsSection: some View {
+        editorSection("Resultados") {
+            if displayedSearchFriends.isEmpty, lookupResult == nil {
+                Text("Buscando…")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
-            ForEach(displayedFriends) { friend in
-                friendRow(friend)
-            }
-
-            if viewModel.friends.count > friendsDisplayLimit && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("+\(viewModel.friends.count - friendsDisplayLimit) más — busca por username para encontrarlos")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
+            friendRows(displayedSearchFriends)
             searchResultRow
         }
     }
 
-    private var displayedFriends: [SocialRepository.Friend] {
+    private var displayedSearchFriends: [SocialRepository.Friend] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !trimmed.isEmpty else { return Array(viewModel.friends.prefix(friendsDisplayLimit)) }
         return viewModel.friends.filter { $0.username.lowercased().contains(trimmed) }
     }
 
     @ViewBuilder
     private var searchResultRow: some View {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if !trimmed.isEmpty, let lookupResult, !displayedFriends.contains(where: { $0.username.lowercased() == trimmed }) {
+        if !trimmed.isEmpty, let lookupResult, !displayedSearchFriends.contains(where: { $0.username.lowercased() == trimmed }) {
             if lookupResult.found, let userID = lookupResult.userID {
                 HStack {
                     Text("@\(trimmed)")

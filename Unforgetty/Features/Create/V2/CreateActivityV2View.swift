@@ -225,6 +225,13 @@ struct CreateActivityV2View: View {
                         }
                     }
                     .transition(.blurReplace.combined(with: .opacity))
+                } else if editViewModel.editSubSheet == .friendMessage {
+                    FriendMessageComposeSheet(viewModel: editViewModel) {
+                        withAnimation(.snappy) {
+                            editViewModel.editSubSheet = nil
+                        }
+                    }
+                    .transition(.blurReplace.combined(with: .opacity))
                 } else if editViewModel.editSubSheet == .songPicker {
                     MusicPickerSheet(viewModel: editViewModel) {
                         withAnimation(.snappy) {
