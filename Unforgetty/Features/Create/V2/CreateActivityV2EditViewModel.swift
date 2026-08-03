@@ -330,7 +330,8 @@ final class CreateActivityV2EditViewModel: DraftEditingViewModel, ObservableObje
             // track "did the image actually change" separately.
             if draft.kind == .image, let imageData = draft.style.backgroundImageData {
                 do {
-                    draft.style.backgroundImageURL = try await SocialRepository.shared.uploadImage(imageData)
+                    let uploadData = ImagePreparation.preparedFriendUploadImageData(from: imageData)
+                    draft.style.backgroundImageURL = try await SocialRepository.shared.uploadImage(uploadData)
                 } catch {
                     errorMessage = error.localizedDescription
                     return false

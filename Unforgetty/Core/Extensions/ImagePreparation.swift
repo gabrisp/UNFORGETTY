@@ -14,7 +14,7 @@ enum ImagePreparation {
     private static let startingMaxDimension: CGFloat = 300
     private static let maxIterations = 8
 
-    static func preparedBackgroundImageData(from data: Data) -> Data {
+    static func preparedBackgroundImageData(from data: Data, targetMaxBytes: Int = Self.targetMaxBytes) -> Data {
         #if canImport(UIKit)
         guard let image = UIImage(data: data) else { return data }
 
@@ -43,6 +43,17 @@ enum ImagePreparation {
         #else
         return data
         #endif
+    }
+
+    /// A tighter re-compression pass applied only to the copy actually uploaded/downloaded for a
+    /// friend ping — independent of the 30KB cap above, which is sized for the Live Activity's
+    /// *local* decode-memory budget, not network/storage size. Reuses the same shrink-loop against
+    /// the already-~30KB-or-smaller local copy, so this is a cheap second pass, not starting over
+    /// from a full-resolution source.
+    static let friendUploadTargetMaxBytes = 6_000
+
+    static func preparedFriendUploadImageData(from data: Data) -> Data {
+        preparedBackgroundImageData(from: data, targetMaxBytes: friendUploadTargetMaxBytes)
     }
 
     /// Two representative colors sampled from the top and bottom of the image (as hex strings, no

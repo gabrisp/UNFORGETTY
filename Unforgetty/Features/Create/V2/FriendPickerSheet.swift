@@ -57,9 +57,6 @@ struct FriendPickerSheet: View {
                     .buttonStyle(.glassProminent)
                 }
             }
-            .background {
-                Color.black.ignoresSafeArea()
-            }
         }
         .foregroundStyle(.white)
         .tint(.yellow)
