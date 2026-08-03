@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var isStatusError = false
     @State private var isRegistering = false
     @State private var debugPayload: String?
+    @State private var isDynamicIslandEnabled = WidgetContentStore.isDynamicIslandEnabled()
     @StateObject private var social = SocialSettingsModel()
     @StateObject private var spotify = SpotifySettingsModel()
 
@@ -47,6 +48,15 @@ struct SettingsView: View {
                         }
                         .padding(.vertical, 4)
                     }
+                }
+
+                Section {
+                    Toggle("Dynamic Island", isOn: $isDynamicIslandEnabled)
+                        .onChange(of: isDynamicIslandEnabled) { _, newValue in
+                            WidgetContentStore.setDynamicIslandEnabled(newValue)
+                        }
+                } footer: {
+                    Text("Muestra el contenido de tu Live Activity (o la de un amigo) en el Dynamic Island. Si lo desactivas, el Dynamic Island se queda vacío.")
                 }
 
                 Section("Debug") {

@@ -36,11 +36,18 @@ struct UnforgettyWidget: Widget {
             LockScreenActivityView(notificationID: context.attributes.notificationID, state: context.state)
                 .activityBackgroundTint(Color(hex: tintHex).opacity(0.6))
                 .activitySystemActionForegroundColor(.white)
-        } dynamicIsland: { _ in
-            // v1 deliberately has no Dynamic Island presentation.
+        } dynamicIsland: { context in
             DynamicIsland {
-                DynamicIslandExpandedRegion(.center) { EmptyView() }
-            } compactLeading: { EmptyView() } compactTrailing: { EmptyView() } minimal: { EmptyView() }
+                DynamicIslandExpandedRegion(.center) {
+                    DynamicIslandExpandedView(notificationID: context.attributes.notificationID, state: context.state)
+                }
+            } compactLeading: {
+                DynamicIslandCompactIcon(notificationID: context.attributes.notificationID, state: context.state)
+            } compactTrailing: {
+                EmptyView()
+            } minimal: {
+                DynamicIslandCompactIcon(notificationID: context.attributes.notificationID, state: context.state)
+            }
         }
     }
 }
@@ -578,6 +585,303 @@ private struct OptionalWidgetURL: ViewModifier {
             content.widgetURL(url)
         } else {
             content
+        }
+    }
+}
+
+/// The five content kinds the Dynamic Island's expanded region knows how to render — mirrors
+/// `ActivityKind`, but as its own switch since a friend snapshot only ever carries three of these
+/// (no `.todo`/`.actions` — checklists and live-action buttons aren't friend-sendable).
+private enum DynamicIslandKind {
+    case text, image, music, todo, actions
+
+    init(widgetKind: String) {
+        switch widgetKind {
+        case "image": self = .image
+        case "music": self = .music
+        case "check.buttons", "buttons": self = .actions
+        case "note": self = .text
+        default: self = .todo
+        }
+    }
+
+    init(snapshotKind: String) {
+        switch snapshotKind {
+        case "image": self = .image
+        case "music": self = .music
+        default: self = .text
+        }
+    }
+}
+
+/// Everything shown in the Dynamic Island's expanded region — a genuinely separate rendering path
+/// from the Lock Screen (`LockScreenActivityView`), not a reuse of it, because the styling rules
+/// are deliberately different here: no card background at all (the system's own Island background
+/// already does that job), and no attempt to keep content clear of where the physical camera
+/// housing sits — a `Button(intent:)` on the "circle" tap targets is checked here regardless of
+/// whether the physical housing might visually cover part of it.
+private struct DynamicIslandExpandedView: View {
+    let notificationID: String
+    let state: UnforgettyActivityAttributes.ContentState
+
+    private var draft: WidgetDraft? {
+        WidgetContentStore.draft(for: notificationID)
+    }
+
+    var body: some View {
+        Group {
+            if !WidgetContentStore.isDynamicIslandEnabled() {
+                EmptyView()
+            } else if let draft {
+                ownContent(draft)
+            } else if let fromUsername = state.fromUsername, let snapshot = state.friendSnapshot {
+                friendContent(fromUsername: fromUsername, snapshot: snapshot)
+            } else {
+                EmptyView()
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func ownContent(_ draft: WidgetDraft) -> some View {
+        switch DynamicIslandKind(widgetKind: draft.kind) {
+        case .text:
+            textContent(
+                text: draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Note" : draft.body,
+                style: draft.style
+            )
+        case .todo:
+            todoContent(items: draft.checklistItems, style: draft.style)
+        case .image:
+            imageContent(data: draft.style.backgroundImageData, textHex: draft.style.textHex)
+        case .music:
+            musicContent(
+                title: (draft.musicTitle?.isEmpty ?? true) ? "Music" : draft.musicTitle!,
+                artist: draft.musicArtist,
+                albumArtData: draft.musicAlbumArtData,
+                spotifyURL: draft.musicSpotifyURL,
+                style: draft.style
+            )
+        case .actions:
+            actionsContent(items: draft.liveActionItems ?? [])
+        }
+    }
+
+    @ViewBuilder
+    private func friendContent(fromUsername: String, snapshot: FriendActivitySnapshot) -> some View {
+        // Same teaser-first behavior as the Lock Screen (FriendMessageTeaserView) — the message
+        // (if any) shows before the real content, with a working reveal button, not just on the
+        // Lock Screen.
+        if let message = state.message, !message.isEmpty, !WidgetContentStore.isFriendMessageRevealed(notificationID: notificationID) {
+            VStack(spacing: 8) {
+                Text("Tienes un mensaje de @\(fromUsername)")
+                    .font(.subheadline.weight(.semibold))
+                    .multilineTextAlignment(.center)
+                Button(intent: RevealFriendMessageIntent(notificationID: notificationID)) {
+                    Text("Ver")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color(hex: snapshot.friendSendButtonColorHex))
+            }
+            .foregroundStyle(Color(hex: snapshot.textHex))
+            .padding(10)
+        } else {
+            let style = friendWidgetStyle(from: snapshot)
+            switch DynamicIslandKind(snapshotKind: snapshot.kind) {
+            case .music:
+                musicContent(
+                    title: (snapshot.musicTitle?.isEmpty ?? true) ? "Music" : snapshot.musicTitle!,
+                    artist: snapshot.musicArtist,
+                    albumArtData: WidgetContentStore.musicAlbumArt(notificationID: notificationID),
+                    spotifyURL: snapshot.musicSpotifyURL,
+                    style: style
+                )
+            case .image:
+                imageContent(data: WidgetContentStore.musicAlbumArt(notificationID: notificationID), textHex: snapshot.textHex)
+            default:
+                textContent(text: snapshot.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Note" : snapshot.body, style: style)
+            }
+        }
+    }
+
+    private func friendWidgetStyle(from snapshot: FriendActivitySnapshot) -> WidgetStyle {
+        WidgetStyle(
+            backgroundHex: snapshot.backgroundHex,
+            textHex: snapshot.textHex,
+            font: snapshot.font,
+            textSize: snapshot.textSize,
+            alignment: snapshot.alignment,
+            verticalAlignment: snapshot.verticalAlignment,
+            musicLayout: snapshot.musicLayout
+        )
+    }
+
+    // MARK: - Per-kind content (no background, minimal padding — see the type doc comment)
+
+    private func textContent(text: String, style: WidgetStyle) -> some View {
+        Text(text)
+            .font(.system(size: min(style.textSize, 22), weight: .medium, design: style.fontDesign))
+            .multilineTextAlignment(style.textAlignment)
+            .lineLimit(4)
+            .foregroundStyle(Color(hex: style.textHex))
+            .frame(maxWidth: .infinity, alignment: style.contentAlignment)
+            .padding(10)
+    }
+
+    private func todoContent(items: [WidgetChecklistItem], style: WidgetStyle) -> some View {
+        VStack(alignment: style.horizontalAlignment, spacing: 6) {
+            ForEach(items.prefix(4)) { item in
+                HStack(spacing: 8) {
+                    Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 14))
+                    Text(item.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "To Do" : item.text)
+                        .lineLimit(1)
+                        .strikethrough(item.isCompleted)
+                }
+            }
+        }
+        .font(.system(size: min(style.textSize, 18), design: style.fontDesign))
+        .foregroundStyle(Color(hex: style.textHex))
+        .frame(maxWidth: .infinity, alignment: style.contentAlignment)
+        .padding(10)
+    }
+
+    // No inset/avoidance for where the physical camera housing sits — full-bleed, simple padding.
+    private func imageContent(data: Data?, textHex: String) -> some View {
+        Group {
+            if let image = widgetContentImage(from: data) {
+                image.resizable().scaledToFill()
+            } else {
+                ZStack {
+                    Color.secondary.opacity(0.12)
+                    Image(systemName: "photo")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Color(hex: textHex).opacity(0.55))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(.rect(cornerRadius: 14, style: .continuous))
+        .padding(8)
+    }
+
+    private func widgetContentImage(from data: Data?) -> Image? {
+        #if canImport(UIKit)
+        guard let data, let uiImage = ImageDecodeCache.image(for: data) else { return nil }
+        return Image(uiImage: uiImage)
+        #else
+        return nil
+        #endif
+    }
+
+    private func musicContent(title: String, artist: String?, albumArtData: Data?, spotifyURL: String?, style: WidgetStyle) -> some View {
+        HStack(spacing: 12) {
+            let art = Group {
+                if let image = widgetContentImage(from: albumArtData) {
+                    image.resizable().scaledToFill()
+                } else {
+                    ZStack {
+                        Color.secondary.opacity(0.12)
+                        Image(systemName: "music.note")
+                            .foregroundStyle(Color(hex: style.textHex).opacity(0.55))
+                    }
+                }
+            }
+            .frame(width: 44, height: 44)
+            .clipShape(musicClipShape(for: style.musicLayout))
+
+            if let spotifyURL, !spotifyURL.isEmpty {
+                Button(intent: OpenExternalLinkIntent(urlString: spotifyURL)) { art }
+                    .buttonStyle(.plain)
+            } else {
+                art
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold, design: style.fontDesign))
+                    .lineLimit(1)
+                if let artist, !artist.isEmpty {
+                    Text(artist)
+                        .font(.system(size: 12, design: style.fontDesign))
+                        .lineLimit(1)
+                        .opacity(0.7)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(Color(hex: style.textHex))
+        .padding(10)
+    }
+
+    private func actionsContent(items: [WidgetLiveActionItem]) -> some View {
+        let shown = Array(items.prefix(4))
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: max(1, shown.count)), spacing: 8) {
+            ForEach(shown) { item in
+                Button(intent: RunLiveActionIntent(item: item)) {
+                    VStack(spacing: 4) {
+                        if let emoji = item.customIcon?.trimmingCharacters(in: .whitespacesAndNewlines), !emoji.isEmpty {
+                            Text(String(emoji.prefix(2))).font(.system(size: 18))
+                        } else {
+                            Image(systemName: item.icon).font(.system(size: 16, weight: .semibold))
+                        }
+                        Text(item.title)
+                            .font(.caption2)
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(Color(hex: item.textHex))
+                    .frame(maxWidth: .infinity)
+                    .padding(8)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(8)
+    }
+}
+
+/// The tiny always-visible compact/minimal presentations — just a small icon for the content kind,
+/// tinted with the activity's own text color. Not covered by the user-facing spec for the expanded
+/// region (background/padding rules don't really apply to a glyph this size), but something
+/// reasonable has to be here for the Island's default collapsed state, which is what's actually
+/// visible most of the time.
+private struct DynamicIslandCompactIcon: View {
+    let notificationID: String
+    let state: UnforgettyActivityAttributes.ContentState
+
+    private var draft: WidgetDraft? {
+        WidgetContentStore.draft(for: notificationID)
+    }
+
+    var body: some View {
+        Group {
+            if !WidgetContentStore.isDynamicIslandEnabled() {
+                EmptyView()
+            } else if let draft {
+                icon(for: DynamicIslandKind(widgetKind: draft.kind))
+                    .foregroundStyle(Color(hex: draft.style.textHex))
+            } else if let snapshot = state.friendSnapshot {
+                icon(for: DynamicIslandKind(snapshotKind: snapshot.kind))
+                    .foregroundStyle(Color(hex: snapshot.textHex))
+            } else {
+                EmptyView()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func icon(for kind: DynamicIslandKind) -> some View {
+        switch kind {
+        case .text: Image(systemName: "text.alignleft")
+        case .todo: Image(systemName: "checklist")
+        case .image: Image(systemName: "photo")
+        case .music: Image(systemName: "music.note")
+        case .actions: Image(systemName: "square.grid.2x2")
         }
     }
 }

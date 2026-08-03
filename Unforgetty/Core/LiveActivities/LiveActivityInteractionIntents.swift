@@ -495,6 +495,19 @@ nonisolated enum WidgetContentStore {
         defaults.synchronize()
     }
 
+    /// Settings toggle controlling whether the Dynamic Island shows real content or stays empty
+    /// (this app's original v1 behavior). Defaults to enabled — absent key reads as `true`, not
+    /// `false`, so existing installs get the new content without visiting Settings first.
+    private static let dynamicIslandEnabledKey = "dynamicIslandEnabled.v1"
+
+    static func isDynamicIslandEnabled() -> Bool {
+        defaults.object(forKey: dynamicIslandEnabledKey) == nil ? true : defaults.bool(forKey: dynamicIslandEnabledKey)
+    }
+
+    static func setDynamicIslandEnabled(_ enabled: Bool) {
+        defaults.set(enabled, forKey: dynamicIslandEnabledKey)
+    }
+
     private static func updateActivity(notificationID: String, mutate: (inout WidgetActivity) -> Void) {
         guard
             let data = defaults.data(forKey: "activities.v1"),
