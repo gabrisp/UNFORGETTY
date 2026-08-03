@@ -1,10 +1,36 @@
+import StoreKit
 import SwiftUI
+
+/// Whatever the footer's secondary links currently have presented — one state instead of a
+/// separate `@State private var isShowingX` bool per link, so adding another one (a Privacy sheet,
+/// say) extends this switch instead of growing a new sibling flag.
+private enum PaywallPresentedSheet: Identifiable {
+    case redeemCode
+
+    var id: Self { self }
+}
 
 struct PremiumView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: ActivityStore
     @State private var selectedProductID: String?
     @State private var isPurchasing = false
+    @State private var presentedSheet: PaywallPresentedSheet?
+
+    // Apple's own standard EULA — used because this paywall doesn't have a custom Terms of Use
+    // document; Apple explicitly provides this URL for exactly that case, and App Store review
+    // requires *some* Terms of Use link on any auto-renewable subscription screen. A plain `Link`
+    // needs no presentation state at all, unlike redeemCode below.
+    private static let termsOfUseURL = URL(string: "https://www.apple.com/legal/internetservices/itunes/dev/stdeula/")!
+
+    /// `.offerCodeRedemption(isPresented:)` is a system StoreKit modifier that only takes a
+    /// `Binding<Bool>` — this bridges it to `presentedSheet` instead of needing its own flag.
+    private var isShowingOfferCodeRedemption: Binding<Bool> {
+        Binding(
+            get: { presentedSheet == .redeemCode },
+            set: { presentedSheet = $0 ? .redeemCode : nil }
+        )
+    }
 
     var body: some View {
         NavigationStack {
@@ -19,24 +45,12 @@ struct PremiumView: View {
             // be exceeded by anything inside it no matter what that content demands.
             GeometryReader { proxy in
                 VStack(spacing: 0) {
-                    ScrollView(.vertical) {
-                        VStack(spacing: 20) {
-                            PaywallMarqueeShowcase()
-                                .padding(.horizontal, -16)
-                                .padding(.top, 4)
-                                .frame(width: proxy.size.width)
-                                .clipped()
-
-                            Image(systemName: store.isPremium ? "checkmark.seal.fill" : "sparkles")
-                                .font(.largeTitle)
-                                .foregroundStyle(.indigo)
-                            Text(store.isPremium ? "Premium activo" : "Unforgetty Premium").font(.title.bold())
-                            Text("Actividades y programaciones ilimitadas.").multilineTextAlignment(.center).foregroundStyle(.secondary)
-                        }
-                        .padding()
+                    PaywallMarqueeShowcase()
+                        .padding(.horizontal, -16)
                         .frame(width: proxy.size.width)
-                    }
-                    .frame(width: proxy.size.width)
+                        .clipped()
+
+                    Spacer(minLength: 0)
 
                     if !store.isPremium {
                         bottomPurchaseOverlay
@@ -94,11 +108,20 @@ struct PremiumView: View {
             .tint(.yellow)
             .disabled(selectedProductID == nil || isPurchasing)
 
-            Button("Restaurar compras") {
-                Task { await store.restorePurchases() }
+            HStack(spacing: 16) {
+                Button("Restaurar") {
+                    Task { await store.restorePurchases() }
+                }
+
+                Button("Canjear código") {
+                    presentedSheet = .redeemCode
+                }
+
+                Link("Términos", destination: Self.termsOfUseURL)
             }
             .buttonStyle(.plain)
             .font(.footnote)
+            .foregroundStyle(.secondary)
 
             if let error = store.purchaseError {
                 Text(error)
@@ -113,6 +136,7 @@ struct PremiumView: View {
         .padding(.bottom, 8)
         .background(.ultraThinMaterial)
         .overlay(alignment: .top) { Divider() }
+        .offerCodeRedemption(isPresented: isShowingOfferCodeRedemption)
     }
 
     /// Falls back to placeholder cards (no real price/trial text, still purchasable by product ID)
