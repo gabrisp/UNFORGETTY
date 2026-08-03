@@ -22,6 +22,9 @@ struct FriendPickerSheet: View {
     @State private var isSendingRequest = false
     @State private var requestStatusMessage: String?
     @State private var errorMessage: String?
+    @State private var showsAllRecent = false
+    @State private var showsAllFriends = false
+    @State private var isRefreshing = false
 
     private let sectionDisplayLimit = 10
 
@@ -61,6 +64,18 @@ struct FriendPickerSheet: View {
                         Image(systemName: "xmark")
                     }
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    // A friend request you sent gets accepted on the *other* person's device —
+                    // nothing pushes that back to you, so there's no way to know without asking
+                    // again. This is that ask, without needing to close and reopen the whole sheet.
+                    Button {
+                        Haptics.light()
+                        Task { await refresh() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .disabled(isRefreshing)
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
                         Haptics.light()
@@ -79,8 +94,7 @@ struct FriendPickerSheet: View {
         .tint(.yellow)
         .preferredColorScheme(.dark)
         .task {
-            await viewModel.loadFriends()
-            pendingRequests = (try? await SocialRepository.shared.listPendingRequests()) ?? []
+            await refresh()
         }
         .task(id: query) {
             let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -186,20 +200,31 @@ struct FriendPickerSheet: View {
 
         if !recentFriends.isEmpty {
             editorSection("Recientes") {
-                friendRows(recentFriends)
+                cappedSection(recentFriends, isExpanded: $showsAllRecent)
             }
         }
 
         if !remainingFriends.isEmpty {
             editorSection("Todos") {
-                friendRows(Array(remainingFriends.prefix(sectionDisplayLimit)))
-
-                if remainingFriends.count > sectionDisplayLimit {
-                    Text("+\(remainingFriends.count - sectionDisplayLimit) más — busca por username para encontrarlos")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                cappedSection(remainingFriends, isExpanded: $showsAllFriends)
             }
+        }
+    }
+
+    /// Same cap/expand treatment for both Recientes and Todos: show up to `sectionDisplayLimit`,
+    /// then a "Ver más" button reveals the rest — the search field up top is the other way to find
+    /// someone without expanding, for whichever section that's actually faster in.
+    @ViewBuilder
+    private func cappedSection(_ friends: [SocialRepository.Friend], isExpanded: Binding<Bool>) -> some View {
+        let shown = isExpanded.wrappedValue ? friends : Array(friends.prefix(sectionDisplayLimit))
+        friendRows(shown)
+
+        if friends.count > sectionDisplayLimit && !isExpanded.wrappedValue {
+            Button("Ver \(friends.count - sectionDisplayLimit) más") {
+                Haptics.light()
+                isExpanded.wrappedValue = true
+            }
+            .font(.footnote.weight(.semibold))
         }
     }
 
@@ -336,6 +361,13 @@ struct FriendPickerSheet: View {
             guard viewModel.sendToFriendUsernames.count < CreateActivityV2EditViewModel.maxFriendRecipients else { return }
             viewModel.sendToFriendUsernames.append(username)
         }
+    }
+
+    private func refresh() async {
+        isRefreshing = true
+        defer { isRefreshing = false }
+        await viewModel.loadFriends()
+        pendingRequests = (try? await SocialRepository.shared.listPendingRequests()) ?? []
     }
 
     private func claimUsername() async {

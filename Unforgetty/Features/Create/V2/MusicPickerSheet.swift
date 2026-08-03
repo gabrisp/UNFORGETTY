@@ -12,6 +12,7 @@ struct MusicPickerSheet: View {
     @State private var isLoadingNowPlaying = false
     @State private var errorMessage: String?
     @State private var isSpotifyConnected = false
+    @State private var isRefreshingStatus = false
     @StateObject private var spotifyAuth = SpotifySettingsModel()
 
     var body: some View {
@@ -90,6 +91,15 @@ struct MusicPickerSheet: View {
             .navigationTitle("Elegir canción")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        Haptics.light()
+                        Task { await refreshStatus() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .disabled(isRefreshingStatus)
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
                         onDone()
@@ -104,10 +114,7 @@ struct MusicPickerSheet: View {
         .tint(.yellow)
         .preferredColorScheme(.dark)
         .task {
-            isSpotifyConnected = (try? await SpotifyRepository.shared.status()) ?? false
-            if isSpotifyConnected {
-                await loadNowPlaying()
-            }
+            await refreshStatus()
         }
         .task(id: query) {
             let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -208,6 +215,15 @@ struct MusicPickerSheet: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(.yellow, lineWidth: 2)
             }
+        }
+    }
+
+    private func refreshStatus() async {
+        isRefreshingStatus = true
+        defer { isRefreshingStatus = false }
+        isSpotifyConnected = (try? await SpotifyRepository.shared.status()) ?? false
+        if isSpotifyConnected {
+            await loadNowPlaying()
         }
     }
 
