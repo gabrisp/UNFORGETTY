@@ -50,7 +50,7 @@ enum ImagePreparation {
     /// *local* decode-memory budget, not network/storage size. Reuses the same shrink-loop against
     /// the already-~30KB-or-smaller local copy, so this is a cheap second pass, not starting over
     /// from a full-resolution source.
-    static let friendUploadTargetMaxBytes = 6_000
+    static let friendUploadTargetMaxBytes = 3_000
 
     static func preparedFriendUploadImageData(from data: Data) -> Data {
         preparedBackgroundImageData(from: data, targetMaxBytes: friendUploadTargetMaxBytes)
