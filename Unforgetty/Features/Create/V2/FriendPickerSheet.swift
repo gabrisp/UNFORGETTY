@@ -309,35 +309,24 @@ struct FriendPickerSheet: View {
         }
     }
 
+    // Unfriending is a destructive, unrelated action — doesn't belong in the middle of picking who
+    // to send something to, where it's too easy to tap by accident. That still lives in Settings.
     private func friendRow(_ friend: SocialRepository.Friend) -> some View {
-        HStack {
-            Button {
-                Haptics.selection()
-                toggle(friend.username)
-            } label: {
-                HStack {
-                    Text("@\(friend.username)")
-                    Spacer()
-                    if viewModel.sendToFriendUsernames.contains(friend.username) {
-                        Image(systemName: "checkmark")
-                            .foregroundStyle(.yellow)
-                    }
+        Button {
+            Haptics.selection()
+            toggle(friend.username)
+        } label: {
+            HStack {
+                Text("@\(friend.username)")
+                Spacer()
+                if viewModel.sendToFriendUsernames.contains(friend.username) {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.yellow)
                 }
-                .contentShape(.rect)
             }
-            .buttonStyle(.plain)
-
-            Button(role: .destructive) {
-                Task {
-                    Haptics.light()
-                    await viewModel.removeFriend(friend)
-                }
-            } label: {
-                Image(systemName: "person.fill.xmark")
-                    .foregroundStyle(.red.opacity(0.8))
-            }
-            .buttonStyle(.plain)
+            .contentShape(.rect)
         }
+        .buttonStyle(.plain)
     }
 
     private func editorSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

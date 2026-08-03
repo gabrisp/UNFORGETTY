@@ -29,6 +29,22 @@ struct FriendMessageComposeSheet: View {
             .navigationTitle("Mensaje")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    // Back to the recipient picker (step 1), not a full close — the recipient list
+                    // is still right there to adjust. X, separately, closes the whole flow.
+                    Button {
+                        Haptics.light()
+                        withAnimation(.snappy) {
+                            viewModel.editSubSheet = .friendPicker
+                        }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+
+                    Button(action: onDone) {
+                        Image(systemName: "xmark")
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(action: onDone) {
                         Image(systemName: "checkmark")

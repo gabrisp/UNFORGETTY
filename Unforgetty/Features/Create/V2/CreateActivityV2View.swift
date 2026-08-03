@@ -459,16 +459,16 @@ struct CreateActivityV2View: View {
             Haptics.light()
             editViewModel.editSubSheet = .friendPicker
         } label: {
-            Image(systemName: "person")
-        }
-        .overlay(alignment: .topTrailing) {
-            if !editViewModel.sendToFriendUsernames.isEmpty {
+            if editViewModel.sendToFriendUsernames.isEmpty {
+                Image(systemName: "person")
+            } else {
+                // Replaces the icon entirely once someone's selected, rather than a small badge
+                // stacked on top of it — the count is the more useful thing to see at a glance here.
                 Text("\(editViewModel.sendToFriendUsernames.count)")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.white)
-                    .frame(minWidth: 16, minHeight: 16)
+                    .padding(6)
                     .background(Circle().fill(.red))
-                    .offset(x: 6, y: -6)
             }
         }
     }

@@ -219,16 +219,6 @@ final class CreateActivityV2EditViewModel: DraftEditingViewModel, ObservableObje
         }
     }
 
-    func removeFriend(_ friend: SocialRepository.Friend) async {
-        do {
-            try await SocialRepository.shared.removeFriend(userID: friend.userID)
-            friends.removeAll { $0.id == friend.id }
-            sendToFriendUsernames.removeAll { $0 == friend.username }
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
     func selectTrack(_ track: SpotifyRepository.SpotifyTrack) async {
         draft.musicTitle = track.name
         draft.musicArtist = track.artist
