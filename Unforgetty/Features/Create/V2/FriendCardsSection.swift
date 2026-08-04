@@ -17,12 +17,21 @@ struct FriendCardsSection: View {
     let onReedit: (ScheduledActivity) -> Void
 
     @StateObject private var viewModel = FriendCardsViewModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ForEach(viewModel.receivedPings) { ping in
             receivedPingCardView(ping)
         }
         .task {
+            viewModel.load()
+        }
+        // `.task` only fires once per mount (i.e. once per switch to Friends browsing) — a ping
+        // that arrives while this section is already visible (app foregrounded on this tab, or
+        // just sitting here when the push comes in) wouldn't otherwise show up until the user
+        // switched away and back. Re-load whenever the app becomes active while mounted instead.
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
             viewModel.load()
         }
         .onChange(of: viewModel.selectedFriendPing?.notificationID) { _, newValue in
