@@ -6,7 +6,7 @@ struct OnboardingWelcomeStepView: View {
     // one shared index) rather than independently, so they read as one coherent message each time.
     private static let messages: [(title: String, subtitle: String)] = [
         ("Never forget what matters", "Keep the things you can't afford to forget on your Lock Screen."),
-        ("Let them know you remember", "Let others know how much you think of them.")
+        ("Let them know you remember", "Show someone you're thinking of them.")
     ]
 
     @State private var messageIndex = 0
