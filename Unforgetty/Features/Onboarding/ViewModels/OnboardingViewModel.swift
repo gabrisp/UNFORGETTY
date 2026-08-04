@@ -14,10 +14,10 @@ enum OnboardingStep: Int, CaseIterable {
     case createIntro
     case createChooseType
     case createCustomize
+    // Sends for real (an immediate, one-off start — no scheduling ahead until the user unlocks
+    // Pro on the paywall step right after this) and, once sent, shows "It's live!" + the shared
+    // Continue button in place of the sheet, still on this same step — no separate celebrate step.
     case createEditor
-    // Shown right after `createEditor` actually starts the Live Activity (an immediate, one-off
-    // start — no scheduling ahead until the user unlocks Pro on the paywall step right after this).
-    case createCelebrate
     case paywall
 }
 
@@ -69,7 +69,7 @@ final class OnboardingViewModel: ObservableObject {
         case .questionForgot: forgotAnswer != nil
         case .questionRemembered: rememberedAnswer != nil
         case .notifications: true
-        case .createIntro, .createChooseType, .createCustomize, .createEditor, .createCelebrate: true
+        case .createIntro, .createChooseType, .createCustomize, .createEditor: true
         case .paywall: true
         }
     }

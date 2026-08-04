@@ -1,42 +1,62 @@
 import SwiftUI
 
-/// Reuses the REAL editor sheet (`CreateActivityV2EditSheet`, `isOnboarding: true`) rather than a
-/// simplified mock — same component the main app presents when a card is opened, just with
-/// scheduling disabled (see that sheet's `isOnboarding` doc comment) and no kind-switcher/friend
-/// picker/top cancel-send toolbar, since none of those exist here in the first place — this view
-/// builds its own minimal chrome instead of embedding `CreateActivityV2View`'s full toolbar. In
-/// their place, a single onboarding-only "Send" button (top-trailing, where the friend/kind menu
-/// would normally sit) does the one thing this step needs: create the activity for real.
+/// Reuses the REAL editing surface, not a mock: `EditingSurfaceBackground` (the same animated dark
+/// glow `CreateActivityV2View` shows behind a selected card), `SelectedActivityPreview` (the same
+/// `LivePreviewView`-backed card), and `CreateActivityV2EditSheet` itself (`isOnboarding: true`).
+/// The only thing that's actually different from the real screen is the toolbar: no kind-switcher,
+/// no friend-picker, no top Cancel/Send cutout buttons — just a single onboarding-only "Send"
+/// button where the real toolbar's trailing items would sit, because none of those other options
+/// apply to a first activity being created inside onboarding.
 struct OnboardingCreateEditorStepView: View {
     @EnvironmentObject private var store: ActivityStore
     @ObservedObject var viewModel: CreateActivityV2EditViewModel
-    /// Fired once the activity has actually been created and the sheet has closed — the parent
-    /// advances the shared onboarding step from here rather than through the normal shared footer,
-    /// which is hidden for the whole duration of this step.
-    var onSent: () -> Void
+    /// The parent hides the shared header/footer for the whole step — this flips once the
+    /// activity is actually sent, so the footer's Continue button reappears in place of the real
+    /// screen's own auto-timeout-then-return-to-grid behavior.
+    @Binding var isAwaitingContinue: Bool
 
     @State private var isShowingSheet = false
     @State private var isSending = false
+    @State private var hasSent = false
+    @State private var containerSize: CGSize = .zero
+    @State private var isBouncing = false
 
     var body: some View {
-        ZStack {
-            // The same "dark editing surface" treatment CreateActivityV2View switches to when a
-            // card is selected — simplified to a flat animated color here rather than replicating
-            // its full radial-glow background, since this step never shows the card grid behind it.
-            Color.black.ignoresSafeArea()
-
+        NavigationStack {
             VStack {
-                LivePreviewView(viewModel: viewModel)
-                    .padding(.horizontal, 24)
-                    .overlay(alignment: .topTrailing) {
-                        sendButton
-                            .padding(.top, 8)
-                            .padding(.trailing, 32)
-                    }
+                Spacer(minLength: 0)
+                SelectedActivityPreview(
+                    viewModel: viewModel,
+                    selectedLiveActionID: nil,
+                    onEditLiveAction: { _ in },
+                    onPickSong: { viewModel.editSubSheet = .songPicker },
+                    isPickingSong: viewModel.editSubSheet == .songPicker,
+                    isLiveActivity: false,
+                    onEndLiveActivity: {},
+                    showsStatusPill: false
+                )
+                .padding(.horizontal, 20)
+
+                if hasSent {
+                    liveConfirmation
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
 
                 Spacer(minLength: 0)
             }
-            .padding(.top, 24)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar {
+                if !hasSent {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        sendButton
+                    }
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { containerSize = $0 }
+        .background {
+            EditingSurfaceBackground(style: viewModel.draft.style, containerSize: containerSize)
         }
         .task {
             try? await Task.sleep(for: .seconds(0.35))
@@ -67,8 +87,8 @@ struct OnboardingCreateEditorStepView: View {
             }
             .foregroundStyle(.black)
             .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .liquidGlassCard(tint: .yellow, cornerRadius: 16, interactive: true)
+            .padding(.vertical, 8)
+            .liquidGlassCard(tint: .yellow, cornerRadius: 14, interactive: true)
             .opacity(viewModel.draft.isValid && !isSending ? 1 : 0.4)
             .contentShape(Rectangle())
         }
@@ -76,15 +96,37 @@ struct OnboardingCreateEditorStepView: View {
         .disabled(!viewModel.draft.isValid || isSending)
     }
 
+    // Same moment the real screen marks with `successBottomBanner` after a send, just with
+    // onboarding's own copy in place of the real one's dynamic message, and no 5-second
+    // auto-timeout back to the grid — the shared Continue button takes over from here instead.
+    private var liveConfirmation: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "chevron.up")
+                .font(.system(size: 26, weight: .bold))
+                .foregroundStyle(.yellow)
+                .offset(y: isBouncing ? -8 : 4)
+                .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isBouncing)
+                .onAppear { isBouncing = true }
+            Text("It's live! Swipe up!!!")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.white)
+        }
+        .padding(.top, 8)
+    }
+
     private func send() {
         Haptics.medium()
         isSending = true
         Task {
             viewModel.saveDraft(store: store)
-            _ = await viewModel.send(store: store)
+            let didSend = await viewModel.send(store: store)
             isSending = false
-            isShowingSheet = false
-            onSent()
+            guard didSend else { return }
+            withAnimation(.snappy) {
+                isShowingSheet = false
+                hasSent = true
+                isAwaitingContinue = true
+            }
         }
     }
 }

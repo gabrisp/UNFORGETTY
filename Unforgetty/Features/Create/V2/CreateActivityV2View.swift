@@ -940,7 +940,10 @@ private enum ActivityStatusPillKind {
     }
 }
 
-private struct SelectedActivityPreview: View {
+/// Not `private`: onboarding's create-editor step reuses this directly (the real LivePreviewView
+/// card + status pill), rather than duplicating it, so the two screens' card actually looks
+/// identical instead of onboarding drifting from whatever this evolves into later.
+struct SelectedActivityPreview: View {
     @EnvironmentObject private var store: ActivityStore
     @ObservedObject var viewModel: CreateActivityV2EditViewModel
     let selectedLiveActionID: UUID?

@@ -7,11 +7,14 @@ struct OnboardingView: View {
     // back to an earlier step via the back button, and so `.saveDraft(store:)`/`.send(store:)`
     // are only ever called against one consistent instance.
     @StateObject private var editViewModel = CreateActivityV2EditViewModel()
+    // Flips once OnboardingCreateEditorStepView actually sends the activity — the footer stays
+    // hidden for the rest of that step (see `hidesFooter`) until then.
+    @State private var isEditorAwaitingContinue = false
 
     var body: some View {
         VStack(spacing: 0) {
             header
-                .opacity(viewModel.currentStep == .createEditor ? 0 : 1)
+                .opacity(hidesChrome ? 0 : 1)
 
             Spacer(minLength: 0)
 
@@ -25,18 +28,27 @@ struct OnboardingView: View {
             // removed there (no adjacent layout to keep stable against). .createEditor is
             // different: it's a full-bleed takeover of the real editor sheet — "everything fades
             // to opacity 0" per spec — so it's hidden via opacity like the header, not removed,
-            // and disabled so it isn't a hidden tap target. Its own onboarding-only "Send" button
-            // (inside OnboardingCreateEditorStepView) does what this footer normally does.
+            // and disabled so it isn't a hidden tap target, until the activity is actually sent
+            // (isEditorAwaitingContinue), at which point the Continue button reappears in place
+            // of the real screen's own auto-timeout-then-return-to-grid behavior.
             if viewModel.currentStep != .paywall {
                 footer
-                    .opacity(viewModel.currentStep == .createEditor ? 0 : 1)
-                    .disabled(viewModel.currentStep == .createEditor)
+                    .opacity(hidesChrome ? 0 : 1)
+                    .disabled(hidesChrome)
             }
         }
         .animation(.snappy, value: viewModel.currentStep)
+        .animation(.snappy, value: isEditorAwaitingContinue)
+        .onChange(of: viewModel.currentStep) { _, _ in
+            isEditorAwaitingContinue = false
+        }
         .onChange(of: viewModel.hasFinishedOnboarding) { _, finished in
             if finished { flow.showRoot() }
         }
+    }
+
+    private var hidesChrome: Bool {
+        viewModel.currentStep == .createEditor && !isEditorAwaitingContinue
     }
 
     @ViewBuilder
@@ -63,11 +75,7 @@ struct OnboardingView: View {
         case .createCustomize:
             OnboardingCreateCustomizeStepView(viewModel: editViewModel)
         case .createEditor:
-            OnboardingCreateEditorStepView(viewModel: editViewModel) {
-                viewModel.goNext()
-            }
-        case .createCelebrate:
-            OnboardingCreateCelebrateStepView(viewModel: editViewModel)
+            OnboardingCreateEditorStepView(viewModel: editViewModel, isAwaitingContinue: $isEditorAwaitingContinue)
         case .paywall:
             OnboardingPaywallStepView(viewModel: viewModel)
         }
@@ -125,8 +133,9 @@ struct OnboardingView: View {
         switch viewModel.currentStep {
         case .welcome: "Get Started"
         case .notifications: "Enable Notifications"
-        // .createEditor never shows this footer (see body) — its own Send button drives .goNext().
-        case .questionForgot, .questionRemembered, .createIntro, .createChooseType, .createCustomize, .createEditor, .createCelebrate, .paywall: "Continue"
+        // .createEditor's footer stays hidden until the activity is actually sent (see
+        // hidesChrome) — "Continue" is what it shows once it reappears at that point.
+        case .questionForgot, .questionRemembered, .createIntro, .createChooseType, .createCustomize, .createEditor, .paywall: "Continue"
         }
     }
 
