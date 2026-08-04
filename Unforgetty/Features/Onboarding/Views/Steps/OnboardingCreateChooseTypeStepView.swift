@@ -13,19 +13,13 @@ struct OnboardingCreateChooseTypeStepView: View {
     @ObservedObject var viewModel: CreateActivityV2EditViewModel
 
     var body: some View {
-        VStack(spacing: 24) {
-            VStack(spacing: 8) {
-                Text("Choose a type")
-                    .font(.title.bold())
-                    .multilineTextAlignment(.center)
-                Text("You can always change this later.")
-                    .foregroundStyle(.secondary)
+        OnboardingStepLayout(title: "Choose a type", subtitle: "You can always change this later.", textAtTop: true) {
+            VStack(spacing: 24) {
+                kindPicker
+                ActivityPreviewView(draft: exampleDraft(for: viewModel.draft.kind))
+                    .padding(.horizontal, 24)
             }
-
-            kindPicker
-
-            ActivityPreviewView(draft: exampleDraft(for: viewModel.draft.kind))
-                .padding(.horizontal, 24)
+            .padding(.top, 24)
         }
     }
 

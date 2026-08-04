@@ -4,22 +4,19 @@ import UserNotifications
 
 struct OnboardingNotificationsStepView: View {
     var body: some View {
-        VStack(spacing: 0) {
+        OnboardingStepLayout(
+            title: "Stay in the loop",
+            subtitle: "Turn on notifications so friends, family, or your partner can reach you — and so your Live Activities can be scheduled and keep running without you having to think about it.",
+            textAtTop: false
+        ) {
+            // The mockup renders its 402x874 design as an unclipped .overlay, scaled down via
+            // .scaleEffect (a render-only transform SwiftUI's layout math doesn't shrink to
+            // match) — without clipping, its painted pixels can bleed past this 380pt frame and
+            // paint over the text below instead of stopping at the boundary.
             OnboardingV2NotificationsiPhoneView(iPhoneTint: .yellow)
                 .frame(maxWidth: .infinity)
                 .frame(height: 380)
-
-            VStack(spacing: 12) {
-                Text("Stay in the loop")
-                    .font(.title.bold())
-                    .multilineTextAlignment(.center)
-
-                Text("Turn on notifications so friends, family, or your partner can reach you — and so your Live Activities can be scheduled and keep running without you having to think about it.")
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 32)
-            .padding(.top, 12)
+                .clipped()
         }
     }
 }

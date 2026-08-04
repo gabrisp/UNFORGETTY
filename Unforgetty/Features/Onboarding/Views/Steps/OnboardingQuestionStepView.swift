@@ -8,19 +8,15 @@ struct OnboardingQuestionStepView: View {
     @Binding var answer: OnboardingAnswer?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text(question)
-                .font(.title.bold())
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-
+        OnboardingStepLayout(title: question, textAtTop: true) {
             VStack(spacing: 10) {
                 ForEach(OnboardingAnswer.allCases) { option in
                     optionRow(option)
                 }
             }
+            .padding(.horizontal, 24)
+            .padding(.top, 20)
         }
-        .padding(.horizontal, 24)
     }
 
     private func optionRow(_ option: OnboardingAnswer) -> some View {
