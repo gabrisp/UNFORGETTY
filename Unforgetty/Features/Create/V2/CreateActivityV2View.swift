@@ -34,35 +34,36 @@ struct CreateActivityV2View: View {
     }
 
     var body: some View {
+        // Native tabs instead of a toolbar Menu toggling one shared grid — bound to `cardSource`
+        // itself (already `Hashable`), so nothing else that reads `cardSource` elsewhere (onReedit,
+        // isBrowsingGridToolbar, etc.) needed to change: switching tabs IS switching cardSource.
+        TabView(selection: $editViewModel.cardSource) {
+            Tab("Stack", systemImage: "square.stack.fill", value: CardSource.own) {
+                stackTabContent
+            }
+            Tab("Friends", systemImage: "person.2.fill", value: CardSource.friends) {
+                friendsTabContent
+            }
+        }
+    }
+
+    private var stackTabContent: some View {
         NavigationStack {
             ScrollView(.vertical) {
                 LazyVStack(spacing: 12) {
-                    if editViewModel.cardSource == .own {
-                        ForEach(store.liveActivityCards) { activity in
-                            SavedLiveActivityCardView(activity: activity)
-                        }
-                    } else {
-                        FriendCardsSection(
-                            containerSize: editViewModel.geometry.containerSize,
-                            animation: animation,
-                            isSelected: $editViewModel.isFriendPingSelected,
-                            onReedit: { activity in
-                                editViewModel.cardSource = .own
-                                withAnimation(animation) {
-                                    select(activity)
-                                }
-                            }
-                        )
+                    ForEach(store.liveActivityCards) { activity in
+                        SavedLiveActivityCardView(activity: activity)
+                            .colorScheme(.dark)
                     }
                 }
             }
             .scrollIndicators(.hidden)
             .safeAreaPadding(15)
-            .scrollDisabled(isActivitySelected || editViewModel.isFriendPingSelected)
+            .scrollDisabled(isActivitySelected)
             // .safeAreaBar (not used here) minimizes/reveals on scroll like a system tab bar —
             // .safeAreaInset just reserves the space and pins the content, no scroll reactivity.
             .safeAreaInset(edge: .bottom) {
-                if !isActivitySelected && !editViewModel.isFriendPingSelected && !isOnboarding {
+                if !isActivitySelected && !isOnboarding {
                     upgradeBar
                 }
             }
@@ -76,13 +77,6 @@ struct CreateActivityV2View: View {
                         undoToolbarButton
                         redoToolbarButton
                     }
-
-//                    if isActivitySelected && editedLiveAction == nil {
-//                        Button("Close", systemImage: "xmark") {
-//                            dismissKeyboard()
-//                            closeSelectedActivity()
-//                        }
-//                    }
                 }
 
                 ToolbarItem(placement: .principal) {
@@ -132,63 +126,19 @@ struct CreateActivityV2View: View {
                             activityKindMenu
                         }
                     }
-
-//                    if isActivitySelected {
-//                        if editedLiveAction == nil {
-//                            Button {
-//                                sendSelectedActivity()
-//                            } label: {
-//                                Image(systemName: "arrow.up")
-//                            }
-//                            .buttonStyle(.glassProminent)
-//                            .tint(.yellow)
-//                            .disabled(isSendDisabled)
-//                        }
-//                    } else {
-//                        Button("Add", systemImage: "plus") {
-//                            withAnimation(animation) {
-//                                select(store.createLiveActivityDraft())
-//                            }
-//                        }
-//
-//                        Button("Upgrade", systemImage: "crown.fill") {
-//                            isShowingPremium = true
-//                        }
-//                        .labelStyle(.titleAndIcon)
-//                        .buttonStyle(.glassProminent)
-//                        .controlSize(.large)
-//                        .tint(.yellow)
-//                    }
                 }
 
                 // Separate spaced groups (not one ToolbarItemGroup) so ToolbarSpacer can actually
-                // sit between them — order is Add, Stack/Friend, Settings.
+                // sit between them. The Stack/Friend switcher itself is gone — the TabView's own
+                // tab bar does that now.
                 if isBrowsingGridToolbar {
-                    // Adding a new activity only makes sense in Stack (own) mode — replaced
-                    // entirely (not just disabled) with a friend-requests button while browsing
-                    // Friend pings, since that's the thing that actually makes sense there.
-                    if editViewModel.cardSource == .own {
-                        ToolbarItemGroup(placement: .topBarTrailing) {
-                            Button("Add", systemImage: "plus") {
-                                Haptics.light()
-                                withAnimation(animation) {
-                                    select(store.createLiveActivityDraft())
-                                }
-                            }
-                        }
-                        ToolbarSpacer(.fixed, placement: .topBarTrailing)
-                    } else {
-                        ToolbarItemGroup(placement: .topBarTrailing) {
-                            Button("Friend Requests", systemImage: "person.2.badge.plus") {
-                                Haptics.light()
-                                editViewModel.presentedGridSheet = .friendRequests
-                            }
-                        }
-                        ToolbarSpacer(.fixed, placement: .topBarTrailing)
-                    }
-
                     ToolbarItemGroup(placement: .topBarTrailing) {
-                        cardSourceMenu
+                        Button("Add", systemImage: "plus") {
+                            Haptics.light()
+                            withAnimation(animation) {
+                                select(store.createLiveActivityDraft())
+                            }
+                        }
                     }
                     ToolbarSpacer(.fixed, placement: .topBarTrailing)
 
@@ -236,7 +186,12 @@ struct CreateActivityV2View: View {
             }
             // Settings is a navigation route, not a sheet — pushed onto this NavigationStack, so
             // this has to live inside it (a .navigationDestination outside the stack it targets
-            // does nothing).
+            // does nothing). Duplicated in the Friends tab's own stack below for the same reason —
+            // whichever tab's Settings button was tapped needs to push in *that* tab's visible
+            // stack, not an invisible one. Since TabView keeps both stacks mounted, triggering it
+            // from one tab can in principle also push (invisibly) in the other if it's still
+            // mounted — harmless in practice since the user only ever sees the tab they tapped
+            // from, but worth knowing if Settings is ever found "already open" after switching tabs.
             .navigationDestination(isPresented: isShowingSettingsBinding) {
                 SettingsView()
             }
@@ -266,9 +221,6 @@ struct CreateActivityV2View: View {
                     .frame(height: successZoneHeight, alignment: .center)
                     .transition(.opacity.combined(with: .scale(scale: 0.94)))
             }
-        }
-        .sheet(item: friendRequestsSheetBinding) { _ in
-            FriendRequestsSheet()
         }
         .sheet(item: $editViewModel.presentedSheetActivity) { activity in
             let spacing: CGFloat = 20
@@ -317,6 +269,7 @@ struct CreateActivityV2View: View {
             .presentationBackgroundInteraction(.enabled(upThrough: .height(maxSheetHeight)))
             .interactiveDismissDisabled()
             .presentationBackground(.clear)
+            .colorScheme(.dark)
         }
         .onGeometryChange(for: CGSize.self) {
             $0.size
@@ -356,15 +309,71 @@ struct CreateActivityV2View: View {
         .background {
             KeyboardVisibilityReader(isVisible: $editViewModel.isKeyboardVisible)
         }
-        // "Reeditar" on a received friend ping (a separate tab) saves the new draft into `store`
-        // then flags it here rather than reaching into this view's local state directly — the two
-        // tabs share no view hierarchy, only `store`/`flow`.
+        // "Reeditar" on a received friend ping (Friends tab) saves the new draft into `store`,
+        // switches cardSource back to .own (which also switches the visible tab, see body's
+        // TabView(selection:)), then flags it here rather than reaching into this view's local
+        // state directly — the two tabs share no view hierarchy, only `store`/`flow`.
         .onChange(of: flow.pendingSelectedActivityID) { _, newValue in
             guard let newValue, let activity = store.liveActivityCards.first(where: { $0.id == newValue }) else { return }
             withAnimation(animation) {
                 select(activity)
             }
             flow.pendingSelectedActivityID = nil
+        }
+    }
+
+    private var friendsTabContent: some View {
+        NavigationStack {
+            ScrollView(.vertical) {
+                LazyVStack(spacing: 12) {
+                    FriendCardsSection(
+                        containerSize: editViewModel.geometry.containerSize,
+                        animation: animation,
+                        isSelected: $editViewModel.isFriendPingSelected,
+                        onReedit: { activity in
+                            editViewModel.cardSource = .own
+                            withAnimation(animation) {
+                                select(activity)
+                            }
+                        }
+                    )
+                }
+            }
+            .scrollIndicators(.hidden)
+            .safeAreaPadding(15)
+            .scrollDisabled(editViewModel.isFriendPingSelected)
+            .navigationTitle(isNavigationTitleHidden ? "" : "Unforgetty")
+            .toolbarTitleDisplayMode(.inlineLarge)
+            .toolbarBackground(.clear, for: .navigationBar)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar {
+                if isBrowsingGridToolbar {
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button("Friend Requests", systemImage: "person.2.badge.plus") {
+                            Haptics.light()
+                            editViewModel.presentedGridSheet = .friendRequests
+                        }
+                    }
+                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
+
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button("Settings", systemImage: "gearshape") {
+                            Haptics.light()
+                            editViewModel.presentedGridSheet = .settings
+                        }
+                    }
+                }
+            }
+            .background {
+                screenBackground
+            }
+            .navigationDestination(isPresented: isShowingSettingsBinding) {
+                SettingsView()
+            }
+        }
+        .statusBarHidden(true)
+        .sheet(item: friendRequestsSheetBinding) { _ in
+            FriendRequestsSheet()
         }
     }
 
@@ -451,13 +460,6 @@ struct CreateActivityV2View: View {
 
     private var isBrowsingGridToolbar: Bool {
         !editViewModel.isKeyboardVisible && !isActivitySelected && !editViewModel.isFriendPingSelected
-    }
-
-    private func switchCardSource(_ source: CardSource) {
-        guard editViewModel.cardSource != source else { return }
-        withAnimation(animation) {
-            editViewModel.cardSource = source
-        }
     }
 
     private var isEditingSubsheet: Bool {
@@ -570,27 +572,6 @@ struct CreateActivityV2View: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 16)
         .padding(.bottom, 6)
-    }
-
-    private var cardSourceMenu: some View {
-        Menu {
-            Button {
-                Haptics.selection()
-                switchCardSource(.own)
-            } label: {
-                Label("Stack", systemImage: "square.stack.fill")
-            }
-
-            Button {
-                Haptics.selection()
-                switchCardSource(.friends)
-            } label: {
-                Label("Friend", systemImage: "person.2")
-            }
-        } label: {
-            Image(systemName: editViewModel.cardSource == .own ? "square.stack.fill" : "person.2")
-        }
-        .accessibilityLabel("Stack or Friend")
     }
 
     private var activityKindMenu: some View {
