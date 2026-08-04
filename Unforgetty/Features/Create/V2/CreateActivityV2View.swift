@@ -59,6 +59,11 @@ struct CreateActivityV2View: View {
             .scrollIndicators(.hidden)
             .safeAreaPadding(15)
             .scrollDisabled(isActivitySelected || editViewModel.isFriendPingSelected)
+            .safeAreaBar(edge: .bottom) {
+                if !isActivitySelected && !editViewModel.isFriendPingSelected && !isOnboarding {
+                    upgradeBar
+                }
+            }
             .navigationTitle(isNavigationTitleHidden ? "" : "Unforgetty")
             .toolbarTitleDisplayMode(.inlineLarge)
             .toolbarBackground(.clear, for: .navigationBar)
@@ -127,22 +132,16 @@ struct CreateActivityV2View: View {
                     } else if !isActivitySelected && !editViewModel.isFriendPingSelected {
                         cardSourceMenu
 
-                        Button("Add", systemImage: "plus") {
-                            Haptics.light()
-                            withAnimation(animation) {
-                                select(store.createLiveActivityDraft())
+                        // Adding a new activity only makes sense in Stack (own) mode — hidden
+                        // entirely rather than just disabled while browsing Friend pings.
+                        if editViewModel.cardSource == .own {
+                            Button("Add", systemImage: "plus") {
+                                Haptics.light()
+                                withAnimation(animation) {
+                                    select(store.createLiveActivityDraft())
+                                }
                             }
                         }
-                        .disabled(editViewModel.cardSource != .own)
-
-                        Button("Upgrade", systemImage: "crown.fill") {
-                            Haptics.medium()
-                            flow.showPaywall()
-                        }
-                        .labelStyle(.titleAndIcon)
-                        .buttonStyle(.glassProminent)
-                        .controlSize(.large)
-                        .tint(.yellow)
 
                         Button("Settings", systemImage: "gearshape") {
                             Haptics.light()
@@ -511,6 +510,33 @@ struct CreateActivityV2View: View {
                     .background(Circle().fill(.red))
             }
         }
+    }
+
+    // Replaces the old inline toolbar "Upgrade" crown button — a persistent, always-visible bar
+    // reads as a stronger, harder-to-miss upsell than a small toolbar item that scrolled past
+    // whenever the title collapsed.
+    private var upgradeBar: some View {
+        Button {
+            Haptics.medium()
+            flow.showPaywall()
+        } label: {
+            HStack {
+                Text("Unforgetty PRO")
+                    .font(.subheadline.weight(.semibold))
+                Spacer(minLength: 12)
+                Text("Upgrade")
+                    .font(.subheadline.weight(.bold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity)
+            .liquidGlassCard(tint: .yellow, cornerRadius: 20, interactive: true)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 6)
     }
 
     private var cardSourceMenu: some View {
