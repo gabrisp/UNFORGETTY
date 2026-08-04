@@ -16,6 +16,15 @@ enum EditSubSheet: Equatable {
     case songPicker
 }
 
+/// Sheets triggered from the grid-browsing toolbar — Settings pushes as a navigation destination,
+/// Friend Requests presents as a sheet, but both are driven by this one piece of state rather than
+/// a separate bool each.
+enum GridSheet: Identifiable, Equatable {
+    case settings
+    case friendRequests
+    var id: Self { self }
+}
+
 /// A lightweight, device-local "recently sent to" list for the friend picker's Recent section —
 /// not synced anywhere, just a UX convenience for whoever composes on this device. Recorded after
 /// a successful send (see CreateActivityV2EditViewModel.send()), most-recent-first, deduplicated.
@@ -168,7 +177,10 @@ final class CreateActivityV2EditViewModel: DraftEditingViewModel, ObservableObje
     @Published var selectedCardHeight: CGFloat = 160
     @Published var geometry = ScreenGeometry()
     @Published var editSubSheet: EditSubSheet?
-    @Published var isShowingSettings = false
+    /// Sheets triggered from the grid-browsing toolbar (not from an open activity, hence separate
+    /// from `editSubSheet`) — one enum instead of a bool per sheet, so a third one later is just
+    /// another case, not another standalone flag.
+    @Published var presentedGridSheet: GridSheet?
     @Published var successMessage: String?
     /// Friend pings are browsed in the same screen/NavigationStack — only the grid's data source
     /// switches, via the toolbar's Stack/Friend menu — rather than navigating to a separate screen.

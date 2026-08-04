@@ -1,12 +1,16 @@
+import StoreKit
 import SwiftUI
 #if canImport(UIKit)
 import UIKit
 import UserNotifications
 #endif
 
+/// Pushed as a navigation destination (see CreateActivityV2View's `.navigationDestination`), not
+/// presented as a sheet — no NavigationStack of its own here, it relies on the caller's.
 struct SettingsView: View {
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var flow: AppFlowViewModel
+    @EnvironmentObject private var store: ActivityStore
+    @Environment(\.requestReview) private var requestReview
     @State private var userID: String?
     @State private var targetID: String?
     @State private var statusMessage: String?
@@ -15,116 +19,172 @@ struct SettingsView: View {
     @State private var debugPayload: String?
     @StateObject private var social = SocialSettingsModel()
     @StateObject private var spotify = SpotifySettingsModel()
+    @State private var isShowingDisconnectSpotifyConfirm = false
+
+    private static let termsOfUseURL = URL(string: "https://www.apple.com/legal/internetservices/itunes/dev/stdeula/")!
+    // PLACEHOLDER — same caveat as PremiumView's own copy of this URL: must be replaced with a
+    // real hosted privacy policy before release.
+    private static let privacyPolicyURL = URL(string: "https://example.com")!
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    NavigationLink {
-                        SocialDetailView(model: social)
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "person.2.fill")
-                                .font(.title3)
-                                .foregroundStyle(.yellow)
+        List {
+            Section {
+                NavigationLink {
+                    SocialDetailView(model: social)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "person.2.fill")
+                            .font(.title3)
+                            .foregroundStyle(.yellow)
 
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Social")
-                                    .font(.headline)
-                                Text(social.username.map { "@\($0)" } ?? "Sin username")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            if !social.pendingRequests.isEmpty {
-                                Text("\(social.pendingRequests.count)")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(.white)
-                                    .frame(minWidth: 20, minHeight: 20)
-                                    .background(Circle().fill(.red))
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-
-                Section("Debug") {
-                    LabeledContent("User ID", value: userID ?? "—")
-                    LabeledContent("Target ID", value: targetID ?? "—")
-
-                    if let statusMessage {
-                        Text(statusMessage)
-                            .font(.footnote)
-                            .foregroundStyle(isStatusError ? .red : .secondary)
-                    }
-
-                    Button {
-                        Task { await forceRegister() }
-                    } label: {
-                        HStack {
-                            Text("Force Appwrite register")
-                            if isRegistering {
-                                Spacer()
-                                ProgressView()
-                            }
-                        }
-                    }
-                    .disabled(isRegistering)
-
-                    Button("Reset identity", role: .destructive) {
-                        Task {
-                            await AppwritePushIdentity.shared.resetIdentity()
-                            await refresh()
-                            isStatusError = false
-                            statusMessage = "Identity reset."
-                        }
-                    }
-                    .disabled(isRegistering)
-
-                    Button("Reset onboarding", role: .destructive) {
-                        UserDefaults.standard.removeObject(forKey: "hasFinishedOnboarding")
-                        UserDefaults.standard.removeObject(forKey: "onboardingCurrentStep.v1")
-                        dismiss()
-                        flow.showOnboarding()
-                    }
-                    .disabled(isRegistering)
-
-                    if let debugPayload {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(debugPayload)
-                                .font(.system(.caption, design: .monospaced))
-                                .textSelection(.enabled)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Social")
+                                .font(.headline)
+                            Text(social.username.map { "@\($0)" } ?? "Sin username")
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Button {
-                                #if canImport(UIKit)
-                                UIPasteboard.general.string = debugPayload
-                                #endif
-                            } label: {
-                                Label("Copiar payload", systemImage: "doc.on.doc")
-                            }
+                        }
+
+                        Spacer()
+
+                        if !social.pendingRequests.isEmpty {
+                            Text("\(social.pendingRequests.count)")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.white)
+                                .frame(minWidth: 20, minHeight: 20)
+                                .background(Circle().fill(.red))
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            Section {
+                proBanner
+            }
+
+            Section("Application") {
+                Link(destination: Self.termsOfUseURL) {
+                    SettingsGlyphLabel(title: "Terms", systemName: "doc.text.fill", tint: .gray)
+                }
+                Link(destination: Self.privacyPolicyURL) {
+                    SettingsGlyphLabel(title: "Privacy", systemName: "hand.raised.fill", tint: .gray)
+                }
+                Button {
+                    requestReview()
+                } label: {
+                    SettingsGlyphLabel(title: "Rate Unforgetty", systemName: "star.fill", tint: .yellow)
+                }
+                .buttonStyle(.plain)
+            }
+            .textCase(nil)
+
+            Section("External Settings") {
+                Button {
+                    openNotificationSettings()
+                } label: {
+                    HStack {
+                        SettingsGlyphLabel(title: "Notifications", systemName: "bell.fill", tint: .red)
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.up.right")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    openAppSettings()
+                } label: {
+                    HStack {
+                        SettingsGlyphLabel(title: "App Settings", systemName: "gear", tint: .gray)
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.up.right")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .textCase(nil)
+
+            Section("Music Accounts") {
+                spotifyRow
+
+                if let statusMessage = spotify.statusMessage {
+                    Text(statusMessage)
+                        .font(.footnote)
+                        .foregroundStyle(spotify.isStatusError ? .red : .secondary)
+                }
+            }
+            .textCase(nil)
+
+            Section("Debug") {
+                LabeledContent("User ID", value: userID ?? "—")
+                LabeledContent("Target ID", value: targetID ?? "—")
+
+                if let statusMessage {
+                    Text(statusMessage)
+                        .font(.footnote)
+                        .foregroundStyle(isStatusError ? .red : .secondary)
+                }
+
+                Button {
+                    Task { await forceRegister() }
+                } label: {
+                    HStack {
+                        Text("Force Appwrite register")
+                        if isRegistering {
+                            Spacer()
+                            ProgressView()
                         }
                     }
                 }
+                .disabled(isRegistering)
 
-                SpotifySettingsSection(model: spotify)
-            }
-            .refreshable {
-                await refresh()
-                await social.refresh()
-                await spotify.refresh()
-            }
-            .navigationTitle("Settings")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                        .disabled(isRegistering)
+                Button("Reset identity", role: .destructive) {
+                    Task {
+                        await AppwritePushIdentity.shared.resetIdentity()
+                        await refresh()
+                        isStatusError = false
+                        statusMessage = "Identity reset."
+                    }
+                }
+                .disabled(isRegistering)
+
+                Button("Reset onboarding", role: .destructive) {
+                    UserDefaults.standard.removeObject(forKey: "hasFinishedOnboarding")
+                    UserDefaults.standard.removeObject(forKey: "onboardingCurrentStep.v1")
+                    flow.showOnboarding()
+                }
+                .disabled(isRegistering)
+
+                if let debugPayload {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(debugPayload)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            #if canImport(UIKit)
+                            UIPasteboard.general.string = debugPayload
+                            #endif
+                        } label: {
+                            Label("Copiar payload", systemImage: "doc.on.doc")
+                        }
+                    }
                 }
             }
         }
+        .listStyle(.insetGrouped)
+        .refreshable {
+            await refresh()
+            await social.refresh()
+            await spotify.refresh()
+        }
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
         .preferredColorScheme(.dark)
-        .interactiveDismissDisabled(isRegistering)
         .overlay {
             if isRegistering {
                 ZStack {
@@ -143,11 +203,109 @@ struct SettingsView: View {
             }
         }
         .animation(.default, value: isRegistering)
+        .confirmationDialog(
+            "Disconnect Spotify?",
+            isPresented: $isShowingDisconnectSpotifyConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Disconnect", role: .destructive) {
+                Task { await spotify.disconnect() }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
         .task {
             await refresh()
             await social.refresh()
             await spotify.refresh()
         }
+    }
+
+    @ViewBuilder
+    private var proBanner: some View {
+        if store.isPremium {
+            NavigationLink {
+                SettingsPlanView()
+            } label: {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Unforgetty PRO")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Text("You're a Pro member")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        } else {
+            Button {
+                flow.showPaywall()
+            } label: {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Unforgetty PRO")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Text("Unlock unlimited pings, scheduling ahead, and more")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var spotifyRow: some View {
+        HStack(spacing: 12) {
+            Image("spotify-icon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 28, height: 28)
+                .clipShape(.circle)
+
+            Text("Spotify")
+                .foregroundStyle(.primary)
+
+            Spacer(minLength: 0)
+
+            if spotify.isConnected {
+                Button("Disconnect") {
+                    isShowingDisconnectSpotifyConfirm = true
+                }
+                .foregroundStyle(.red)
+            } else {
+                Button {
+                    Task { await spotify.connect() }
+                } label: {
+                    if spotify.isBusy {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text("Connect")
+                    }
+                }
+                .disabled(spotify.isBusy)
+            }
+        }
+    }
+
+    private func openNotificationSettings() {
+        #if canImport(UIKit)
+        guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+        #endif
+    }
+
+    private func openAppSettings() {
+        #if canImport(UIKit)
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+        #endif
     }
 
     private func refresh() async {
@@ -199,5 +357,84 @@ struct SettingsView: View {
         #else
         statusMessage = "User OK (\(userID ?? "?"))."
         #endif
+    }
+}
+
+/// Colored-circle-icon + title row, matching the app's established settings-row style.
+private struct SettingsGlyphLabel: View {
+    let title: String
+    let systemName: String
+    let tint: Color
+
+    private var iconGradient: LinearGradient {
+        LinearGradient(
+            colors: [tint.opacity(0.75), tint],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(iconGradient)
+                Image(systemName: systemName)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 28, height: 28)
+            .accessibilityHidden(true)
+
+            Text(title)
+                .foregroundStyle(.primary)
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+/// Minimal subscription-management page for Pro members — the App Store's own "Manage
+/// Subscriptions" screen owns the actual billing/renewal details, this just links to it rather
+/// than reimplementing subscription management here.
+private struct SettingsPlanView: View {
+    @EnvironmentObject private var store: ActivityStore
+    private static let manageSubscriptionsURL = URL(string: "https://apps.apple.com/account/subscriptions")!
+
+    var body: some View {
+        List {
+            Section {
+                HStack(spacing: 12) {
+                    Image(systemName: "crown.fill")
+                        .font(.title2)
+                        .foregroundStyle(.yellow)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Unforgetty PRO")
+                            .font(.headline)
+                        Text("Active")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section {
+                Link(destination: Self.manageSubscriptionsURL) {
+                    HStack {
+                        Text("Manage Subscription")
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.up.right")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Button("Restore Purchases") {
+                    Task { await store.restorePurchases() }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle("Your Plan")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

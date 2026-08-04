@@ -164,8 +164,9 @@ struct CreateActivityV2View: View {
                 // Separate spaced groups (not one ToolbarItemGroup) so ToolbarSpacer can actually
                 // sit between them — order is Add, Stack/Friend, Settings.
                 if isBrowsingGridToolbar {
-                    // Adding a new activity only makes sense in Stack (own) mode — hidden
-                    // entirely rather than just disabled while browsing Friend pings.
+                    // Adding a new activity only makes sense in Stack (own) mode — replaced
+                    // entirely (not just disabled) with a friend-requests button while browsing
+                    // Friend pings, since that's the thing that actually makes sense there.
                     if editViewModel.cardSource == .own {
                         ToolbarItemGroup(placement: .topBarTrailing) {
                             Button("Add", systemImage: "plus") {
@@ -173,6 +174,14 @@ struct CreateActivityV2View: View {
                                 withAnimation(animation) {
                                     select(store.createLiveActivityDraft())
                                 }
+                            }
+                        }
+                        ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                    } else {
+                        ToolbarItemGroup(placement: .topBarTrailing) {
+                            Button("Friend Requests", systemImage: "person.2.badge.plus") {
+                                Haptics.light()
+                                editViewModel.presentedGridSheet = .friendRequests
                             }
                         }
                         ToolbarSpacer(.fixed, placement: .topBarTrailing)
@@ -186,7 +195,7 @@ struct CreateActivityV2View: View {
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         Button("Settings", systemImage: "gearshape") {
                             Haptics.light()
-                            editViewModel.isShowingSettings = true
+                            editViewModel.presentedGridSheet = .settings
                         }
                     }
                 }
@@ -225,6 +234,12 @@ struct CreateActivityV2View: View {
                 editViewModel.selectedActivity = editViewModel.activity
                 editViewModel.presentedSheetActivity = editViewModel.activity
             }
+            // Settings is a navigation route, not a sheet — pushed onto this NavigationStack, so
+            // this has to live inside it (a .navigationDestination outside the stack it targets
+            // does nothing).
+            .navigationDestination(isPresented: isShowingSettingsBinding) {
+                SettingsView()
+            }
         }
         .statusBarHidden(true)
         .overlay(alignment: .top) {
@@ -252,8 +267,10 @@ struct CreateActivityV2View: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.94)))
             }
         }
-        .sheet(isPresented: $editViewModel.isShowingSettings) {
-            SettingsView()
+        .sheet(item: friendRequestsSheetBinding) { _ in
+            FriendRequestsSheet {
+                editViewModel.presentedGridSheet = nil
+            }
         }
         .sheet(item: $editViewModel.presentedSheetActivity) { activity in
             let spacing: CGFloat = 20
@@ -685,6 +702,22 @@ struct CreateActivityV2View: View {
         }
         .buttonStyle(.glass)
         .controlSize(.small)
+    }
+
+    // Both bridge editViewModel.presentedGridSheet (one enum, not a bool per sheet) to the
+    // Binding shapes .navigationDestination(isPresented:)/.sheet(item:) each require.
+    private var isShowingSettingsBinding: Binding<Bool> {
+        Binding(
+            get: { editViewModel.presentedGridSheet == .settings },
+            set: { editViewModel.presentedGridSheet = $0 ? .settings : nil }
+        )
+    }
+
+    private var friendRequestsSheetBinding: Binding<GridSheet?> {
+        Binding(
+            get: { editViewModel.presentedGridSheet == .friendRequests ? .friendRequests : nil },
+            set: { editViewModel.presentedGridSheet = $0 }
+        )
     }
 
     private var isSendDisabled: Bool {

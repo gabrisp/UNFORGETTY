@@ -113,38 +113,3 @@ extension SpotifySettingsModel: ASWebAuthenticationPresentationContextProviding 
         #endif
     }
 }
-
-struct SpotifySettingsSection: View {
-    @ObservedObject var model: SpotifySettingsModel
-
-    var body: some View {
-        Section("Spotify") {
-            if model.isConnected {
-                LabeledContent("Estado", value: "Conectado")
-                Button("Desconectar", role: .destructive) {
-                    Task { await model.disconnect() }
-                }
-                .disabled(model.isBusy)
-            } else {
-                SpotifySignInButton {
-                    Task { await model.connect() }
-                }
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-                .padding(.vertical, 4)
-                .disabled(model.isBusy)
-
-                if model.isBusy {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                }
-            }
-
-            if let statusMessage = model.statusMessage {
-                Text(statusMessage)
-                    .font(.footnote)
-                    .foregroundStyle(model.isStatusError ? .red : .secondary)
-            }
-        }
-    }
-}
