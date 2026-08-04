@@ -20,6 +20,10 @@ struct CreateActivityV2View: View {
     // about the real screen's behavior changes unless a caller opts in.
     private let isOnboarding: Bool
     private let onboardingSendCompleted: (() -> Void)?
+    // Drives the floating IGStyleTabBar's scroll-to-minimize behavior — 0 expanded, 1 minimized.
+    // Shared by both tabs' ScrollViews via .adoptForIGTabBar so scrolling either one affects the
+    // same floating control.
+    @State private var tabBarProgress: CGFloat = 0
 
     init(
         progress: Binding<CGFloat>,
@@ -47,7 +51,32 @@ struct CreateActivityV2View: View {
         }
         // Structure/switching logic unchanged — just hides the visible tab bar chrome. Tabs still
         // switch correctly via anything else that sets editViewModel.cardSource (e.g. onReedit).
-        .toolbar(.hidden, for: .tabBar)
+        .hideNativeTabBar()
+        .overlay(alignment: .bottom) {
+            // Floating custom tab bar in its place — hidden while something else (an open
+            // activity/friend ping, or the pushed Settings screen) is on screen, same condition
+            // the grid toolbars already use for "just browsing."
+            if isBrowsingGridToolbar && editViewModel.presentedGridSheet != .settings {
+                IGStyleTabBar(selection: $editViewModel.cardSource) { source in
+                    let symbolName = source == .own ? "square.stack.fill" : "person.2.fill"
+                    return UIImage(systemName: symbolName)?
+                        .withConfiguration(UIImage.SymbolConfiguration(font: .systemFont(ofSize: 20)))
+                        ?? UIImage()
+                } onInteraction: {
+                    if tabBarProgress != 0 {
+                        withAnimation(.interpolatingSpring(duration: 0.25, bounce: 0, initialVelocity: 0)) {
+                            tabBarProgress = 0
+                        }
+                    }
+                }
+                .padding(4)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .scaleEffect(1 - (tabBarProgress * 0.15), anchor: .bottom)
+                .padding(.horizontal, 20)
+                .transition(.opacity)
+            }
+        }
+        .animation(.snappy, value: isBrowsingGridToolbar)
     }
 
     private var stackTabContent: some View {
@@ -60,6 +89,7 @@ struct CreateActivityV2View: View {
                     }
                 }
             }
+            .adoptForIGTabBar($tabBarProgress)
             .scrollIndicators(.hidden)
             .safeAreaPadding(15)
             .scrollDisabled(isActivitySelected)
@@ -342,6 +372,7 @@ struct CreateActivityV2View: View {
                     )
                 }
             }
+            .adoptForIGTabBar($tabBarProgress)
             .scrollIndicators(.hidden)
             .safeAreaPadding(15)
             .scrollDisabled(editViewModel.isFriendPingSelected)

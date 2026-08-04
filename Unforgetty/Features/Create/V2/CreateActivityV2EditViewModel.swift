@@ -2,7 +2,7 @@ import SwiftUI
 import Combine
 import EventKit
 
-enum CardSource: Hashable { case own, friends }
+enum CardSource: Hashable, CaseIterable { case own, friends }
 
 /// Which sub-sheet is showing over the edit sheet — mutually exclusive by construction (unlike the
 /// three separate optionals/booleans this replaced, it's not possible to e.g. have the friend
