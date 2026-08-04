@@ -45,6 +45,9 @@ struct CreateActivityV2View: View {
                 friendsTabContent
             }
         }
+        // Structure/switching logic unchanged — just hides the visible tab bar chrome. Tabs still
+        // switch correctly via anything else that sets editViewModel.cardSource (e.g. onReedit).
+        .toolbar(.hidden, for: .tabBar)
     }
 
     private var stackTabContent: some View {
