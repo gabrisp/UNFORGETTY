@@ -20,6 +20,7 @@ struct SettingsView: View {
     @StateObject private var social = SocialSettingsModel()
     @StateObject private var spotify = SpotifySettingsModel()
     @State private var isShowingDisconnectSpotifyConfirm = false
+    @State private var isRefreshing = false
 
     private static let termsOfUseURL = URL(string: "https://www.apple.com/legal/internetservices/itunes/dev/stdeula/")!
     // PLACEHOLDER — same caveat as PremiumView's own copy of this URL: must be replaced with a
@@ -133,6 +134,7 @@ struct SettingsView: View {
                         .truncationMode(.middle)
                     if userID != nil {
                         Button {
+                            Haptics.light()
                             #if canImport(UIKit)
                             UIPasteboard.general.string = userID
                             #endif
@@ -194,12 +196,21 @@ struct SettingsView: View {
         }
         .listStyle(.insetGrouped)
         .refreshable {
-            await refresh()
-            await social.refresh()
-            await spotify.refresh()
+            await refreshAll()
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    Haptics.light()
+                    Task { await refreshAll() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .disabled(isRefreshing)
+            }
+        }
         .overlay {
             if isRegistering {
                 ZStack {
@@ -229,10 +240,16 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
         }
         .task {
-            await refresh()
-            await social.refresh()
-            await spotify.refresh()
+            await refreshAll()
         }
+    }
+
+    private func refreshAll() async {
+        isRefreshing = true
+        defer { isRefreshing = false }
+        await refresh()
+        await social.refresh()
+        await spotify.refresh()
     }
 
     @ViewBuilder
