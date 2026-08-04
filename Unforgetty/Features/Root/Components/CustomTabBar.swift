@@ -128,9 +128,6 @@ struct IGStyleTabBar<Value: CaseIterable>: UIViewRepresentable where Value: Hash
         let control = CustomSegmentedControl(items: images)
         control.selectedSegmentIndex = Array(Value.allCases).firstIndex(of: selection) ?? 0
         control.selectedSegmentTintColor = UIColor(Color.gray.opacity(0.25))
-        control.backgroundColor = .clear
-        control.tintColor = .clear
-        control.configureTransparentBackground()
         control.addTarget(
             context.coordinator,
             action: #selector(context.coordinator.valueChanged(_:)),
@@ -138,6 +135,19 @@ struct IGStyleTabBar<Value: CaseIterable>: UIViewRepresentable where Value: Hash
         )
 
         control.onTouchBegan = onInteraction
+
+        // Removing Background — image-based segments (unlike the text-based CustomTabBar above)
+        // render their icon color from the control's own tintColor, so clearing tintColor/using
+        // configureTransparentBackground() here (as that other control does) makes the icons
+        // themselves invisible. This hides only the default segment background/divider images
+        // instead, leaving the actual icon UIImageView (always the last subview) visible.
+        DispatchQueue.main.async {
+            for subview in control.subviews {
+                if subview is UIImageView && subview != control.subviews.last {
+                    subview.alpha = 0
+                }
+            }
+        }
 
         return control
     }
