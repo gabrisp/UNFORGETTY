@@ -12,7 +12,26 @@ struct CreateActivityV2View: View {
     // the selection/sheet/keyboard/geometry state that used to be loose @State directly on this
     // view now live here too (see CreateActivityV2EditViewModel.swift), alongside the
     // activity-being-edited state it already owned.
-    @StateObject private var editViewModel = CreateActivityV2EditViewModel()
+    @StateObject private var editViewModel: CreateActivityV2EditViewModel
+    // Onboarding's "create your first activity" step reuses this exact screen — same toolbar
+    // machinery, same background, same sheet — instead of a lookalike, per explicit instruction.
+    // `isOnboarding` is false and `onboardingSendCompleted` is nil at the app's own real call site
+    // (CreateActivityView.swift), so every branch gated on them below is dead code there; nothing
+    // about the real screen's behavior changes unless a caller opts in.
+    private let isOnboarding: Bool
+    private let onboardingSendCompleted: (() -> Void)?
+
+    init(
+        progress: Binding<CGFloat>,
+        editViewModel: CreateActivityV2EditViewModel? = nil,
+        isOnboarding: Bool = false,
+        onboardingSendCompleted: (() -> Void)? = nil
+    ) {
+        self._progress = progress
+        self._editViewModel = StateObject(wrappedValue: editViewModel ?? CreateActivityV2EditViewModel())
+        self.isOnboarding = isOnboarding
+        self.onboardingSendCompleted = onboardingSendCompleted
+    }
 
     var body: some View {
         NavigationStack {
@@ -97,7 +116,14 @@ struct CreateActivityV2View: View {
                             Image(systemName: "keyboard.chevron.compact.down")
                         }
                     } else if showsEditingToolbarButtons {
-                        activityKindMenu
+                        // No kind-switcher in onboarding — the kind was already chosen on the
+                        // previous step — replaced with the one thing this context actually
+                        // needs: a button that sends the activity for real.
+                        if isOnboarding {
+                            onboardingSendButton
+                        } else {
+                            activityKindMenu
+                        }
                     } else if !isActivitySelected && !editViewModel.isFriendPingSelected {
                         cardSourceMenu
 
@@ -171,12 +197,25 @@ struct CreateActivityV2View: View {
                 screenBackground
             }
             .task {
-                store.ensureInitialLiveActivityDraft()
+                if !isOnboarding {
+                    store.ensureInitialLiveActivityDraft()
+                }
+            }
+            .task {
+                guard isOnboarding else { return }
+                // select() (the normal tap path) always persists first via store.update inside
+                // saveDraft — this activity has never been saved before reaching this step, so
+                // without this the ForEach below has no matching entry and nothing renders as
+                // "current." Mirrors select()'s effect otherwise too: opens straight into the
+                // editing surface instead of requiring a tap on a grid onboarding never shows.
+                editViewModel.saveDraft(store: store)
+                editViewModel.selectedActivity = editViewModel.activity
+                editViewModel.presentedSheetActivity = editViewModel.activity
             }
         }
         .statusBarHidden(true)
         .overlay(alignment: .top) {
-            if showsEditingToolbarButtons {
+            if showsEditingToolbarButtons && !isOnboarding {
                 CutoutAccessoryView(
                     padding: .auto,
                     leadingContent: {
@@ -241,7 +280,7 @@ struct CreateActivityV2View: View {
                     .environmentObject(store)
                     .transition(.blurReplace.combined(with: .opacity))
                 } else {
-                    CreateActivityV2EditSheet(viewModel: editViewModel, copiedEditions: $store.copiedEditions)
+                    CreateActivityV2EditSheet(viewModel: editViewModel, copiedEditions: $store.copiedEditions, isOnboarding: isOnboarding)
                         .transition(.blurReplace.combined(with: .opacity))
                 }
             }
@@ -442,13 +481,14 @@ struct CreateActivityV2View: View {
             .opacity(editViewModel.draft.liveActionItems.count < 8 ? 1 : 0)
             .disabled(editViewModel.draft.liveActionItems.count >= 8)
             .animation(.snappy, value: editViewModel.draft.liveActionItems.count)
-        } else if editViewModel.draft.kind == .note || editViewModel.draft.kind == .music || editViewModel.draft.kind == .image {
+        } else if !isOnboarding && (editViewModel.draft.kind == .note || editViewModel.draft.kind == .music || editViewModel.draft.kind == .image) {
             // Actions and checklists don't sync cross-device (device-local shortcuts / no
             // cross-device store). Note, music, and image content can all reach a friend's device —
             // image uploads its background photo to the "images" Storage bucket right before
             // sending (raw bytes don't fit the ~4KB push payload) instead of embedding it inline,
             // same idea as music's Spotify CDN URL. Music/image's own picker opens by tapping the
-            // art in the preview, not this toolbar button.
+            // art in the preview, not this toolbar button. Excluded entirely in onboarding — no
+            // friend-sharing option for the first activity being created there.
             friendPickerButton
                 .task { await editViewModel.loadFriends() }
         }
@@ -627,6 +667,21 @@ struct CreateActivityV2View: View {
         Task {
             let didSend = await editViewModel.send(store: store)
             guard didSend else { return }
+
+            if isOnboarding {
+                // No 5-second auto-timeout back to a grid onboarding never shows — the success
+                // state stays up, and the caller (onboardingSendCompleted) brings back the shared
+                // onboarding footer's Continue button in its place.
+                await MainActor.run {
+                    withAnimation(.snappy) {
+                        editViewModel.presentedSheetActivity = nil
+                        editViewModel.successMessage = "It's live! Swipe up!!!"
+                    }
+                    onboardingSendCompleted?()
+                }
+                return
+            }
+
             let message = sendSuccessMessage()
             // Close only the sheet and show the success state in place of the toolbar buttons —
             // still on the editing screen at this point, not back in the list yet.
@@ -644,6 +699,24 @@ struct CreateActivityV2View: View {
                 closeSelectedActivity()
             }
         }
+    }
+
+    private var onboardingSendButton: some View {
+        Button {
+            Haptics.medium()
+            sendSelectedActivity()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.up")
+                Text("Send")
+            }
+            .fontWeight(.semibold)
+            .foregroundStyle(.black)
+        }
+        .buttonStyle(.glassProminent)
+        .tint(.yellow)
+        .controlSize(.small)
+        .disabled(isSendDisabled)
     }
 
     private func sendSuccessMessage() -> String {
@@ -940,10 +1013,7 @@ private enum ActivityStatusPillKind {
     }
 }
 
-/// Not `private`: onboarding's create-editor step reuses this directly (the real LivePreviewView
-/// card + status pill), rather than duplicating it, so the two screens' card actually looks
-/// identical instead of onboarding drifting from whatever this evolves into later.
-struct SelectedActivityPreview: View {
+private struct SelectedActivityPreview: View {
     @EnvironmentObject private var store: ActivityStore
     @ObservedObject var viewModel: CreateActivityV2EditViewModel
     let selectedLiveActionID: UUID?
