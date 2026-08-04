@@ -85,11 +85,13 @@ struct OnboardingPaywallStepView: View {
                         Text("Start Free Trial").fontWeight(.semibold)
                     }
                 }
+                .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .liquidGlassCard(tint: .yellow, cornerRadius: 20, interactive: true)
+                .opacity(selectedProductID == nil || isPurchasing ? 0.4 : 1)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .tint(.yellow)
+            .buttonStyle(.plain)
             .disabled(selectedProductID == nil || isPurchasing)
 
             HStack(spacing: 16) {

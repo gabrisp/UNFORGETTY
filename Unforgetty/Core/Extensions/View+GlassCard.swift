@@ -5,10 +5,13 @@ import UIKit
 #endif
 
 extension View {
+    // `interactive` is false by default because most call sites are static content (a card's own
+    // background) — turn it on for anything actually tappable (buttons), where Liquid Glass's
+    // touch-reactive shimmer/scale response is the whole point of using it there.
     @ViewBuilder
-    func liquidGlassCard(tint: Color, cornerRadius: CGFloat) -> some View {
+    func liquidGlassCard(tint: Color, cornerRadius: CGFloat, interactive: Bool = false) -> some View {
         if #available(iOS 26.0, *) {
-            self.glassEffect(.regular.tint(tint), in: .rect(cornerRadius: cornerRadius))
+            self.glassEffect(interactive ? .regular.tint(tint).interactive() : .regular.tint(tint), in: .rect(cornerRadius: cornerRadius))
         } else {
             self
                 .background(tint)

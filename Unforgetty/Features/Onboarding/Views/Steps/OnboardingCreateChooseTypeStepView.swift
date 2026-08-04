@@ -46,10 +46,7 @@ struct OnboardingCreateChooseTypeStepView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(isSelected ? Color.yellow.opacity(0.22) : Color.secondary.opacity(0.08))
-            )
+            .liquidGlassCard(tint: isSelected ? Color.yellow.opacity(0.35) : Color.secondary.opacity(0.1), cornerRadius: 14, interactive: true)
             .foregroundStyle(isSelected ? Color.yellow : Color.primary)
         }
         .buttonStyle(.plain)

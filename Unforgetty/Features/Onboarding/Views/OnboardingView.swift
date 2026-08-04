@@ -17,7 +17,7 @@ struct OnboardingView: View {
             Spacer(minLength: 0)
 
             stepContent
-                .transition(.opacity.combined(with: .move(edge: .trailing)))
+                .transition(.blurReplace)
                 .id(viewModel.currentStep)
 
             Spacer(minLength: 0)
@@ -73,6 +73,8 @@ struct OnboardingView: View {
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.body.weight(.semibold))
+                        .frame(width: 36, height: 36)
+                        .liquidGlassCard(tint: Color.secondary.opacity(0.15), cornerRadius: 18, interactive: true)
                 }
                 .buttonStyle(.plain)
             }
@@ -84,7 +86,8 @@ struct OnboardingView: View {
     }
 
     private var footer: some View {
-        Button {
+        let isDisabled = !viewModel.canGoNext || isCreatingFirstActivity
+        return Button {
             advance()
         } label: {
             Group {
@@ -94,12 +97,14 @@ struct OnboardingView: View {
                     Text(continueTitle).fontWeight(.semibold)
                 }
             }
+            .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .liquidGlassCard(tint: .yellow, cornerRadius: 20, interactive: true)
+            .opacity(isDisabled ? 0.4 : 1)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .tint(.yellow)
-        .disabled(!viewModel.canGoNext || isCreatingFirstActivity)
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
         .padding(.horizontal, 24)
         .padding(.bottom, 16)
         .padding(.top, 8)

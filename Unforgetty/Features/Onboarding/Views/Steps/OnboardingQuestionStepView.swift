@@ -40,13 +40,10 @@ struct OnboardingQuestionStepView: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isSelected ? Color.yellow.opacity(0.14) : Color.secondary.opacity(0.08))
-            )
+            .liquidGlassCard(tint: isSelected ? Color.yellow.opacity(0.3) : Color.secondary.opacity(0.1), cornerRadius: 16, interactive: true)
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(isSelected ? Color.yellow : Color.secondary.opacity(0.18), lineWidth: isSelected ? 2 : 1)
+                    .stroke(isSelected ? Color.yellow : Color.clear, lineWidth: 2)
             )
         }
         .buttonStyle(.plain)
