@@ -8,6 +8,12 @@ struct CreateActivityV2EditSheet: View {
     @EnvironmentObject private var store: ActivityStore
     @ObservedObject var viewModel: CreateActivityV2EditViewModel
     @Binding var copiedEditions: ActivityEditionsClipboard?
+    // Onboarding reuses this exact sheet for its "create your first activity" step rather than a
+    // simplified mock — this is the one behavioral difference it needs: the first activity always
+    // goes live immediately, scheduling ahead is a Pro feature introduced right after on the
+    // paywall step, so the "Fecha" toggle is disabled (not hidden — still visible so it isn't a
+    // surprise once unlocked) rather than functional here.
+    var isOnboarding: Bool = false
     @State private var selectedTab = CreateActivityV2EditTab.personalization
     @State private var tabScrollPosition: ScrollPosition = .init()
     @State private var tabContainerSize: CGSize = .zero
@@ -51,7 +57,7 @@ struct CreateActivityV2EditSheet: View {
                         }
                         blurContentEditor
                         dynamicIslandEditor
-                        scheduleEditor
+                        scheduleEditor(isOnboarding: isOnboarding)
                         autoEndEditor
                     }
                 }
@@ -296,7 +302,7 @@ struct CreateActivityV2EditSheet: View {
         }
     }
 
-    private var scheduleEditor: some View {
+    private func scheduleEditor(isOnboarding: Bool) -> some View {
         settingsGroup {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 10) {
@@ -329,6 +335,7 @@ struct CreateActivityV2EditSheet: View {
                         }
                     ))
                     .labelsHidden()
+                    .disabled(isOnboarding)
                 }
 
                 if viewModel.isScheduling {
@@ -416,7 +423,7 @@ struct CreateActivityV2EditSheet: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
-                locationEditor
+                locationEditor(isOnboarding: isOnboarding)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -453,7 +460,7 @@ struct CreateActivityV2EditSheet: View {
     }
 
 
-    private var locationEditor: some View {
+    private func locationEditor(isOnboarding: Bool) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
                 Text("Localización")
@@ -476,6 +483,7 @@ struct CreateActivityV2EditSheet: View {
                     }
                 ))
                 .labelsHidden()
+                .disabled(isOnboarding)
             }
 
             if viewModel.activity.locationTriggerEnabled {

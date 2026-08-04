@@ -2,17 +2,16 @@ import SwiftUI
 
 struct OnboardingView: View {
     @EnvironmentObject private var flow: AppFlowViewModel
-    @EnvironmentObject private var store: ActivityStore
     @StateObject private var viewModel = OnboardingViewModel()
     // Owned here (not per-step) so the draft the user builds in `.createFirst` survives a trip
     // back to an earlier step via the back button, and so `.saveDraft(store:)`/`.send(store:)`
     // are only ever called against one consistent instance.
     @StateObject private var editViewModel = CreateActivityV2EditViewModel()
-    @State private var isCreatingFirstActivity = false
 
     var body: some View {
         VStack(spacing: 0) {
             header
+                .opacity(viewModel.currentStep == .createEditor ? 0 : 1)
 
             Spacer(minLength: 0)
 
@@ -22,8 +21,16 @@ struct OnboardingView: View {
 
             Spacer(minLength: 0)
 
+            // .paywall supplies its own complete bottom purchase UI, so the footer is fully
+            // removed there (no adjacent layout to keep stable against). .createEditor is
+            // different: it's a full-bleed takeover of the real editor sheet — "everything fades
+            // to opacity 0" per spec — so it's hidden via opacity like the header, not removed,
+            // and disabled so it isn't a hidden tap target. Its own onboarding-only "Send" button
+            // (inside OnboardingCreateEditorStepView) does what this footer normally does.
             if viewModel.currentStep != .paywall {
                 footer
+                    .opacity(viewModel.currentStep == .createEditor ? 0 : 1)
+                    .disabled(viewModel.currentStep == .createEditor)
             }
         }
         .animation(.snappy, value: viewModel.currentStep)
@@ -56,9 +63,11 @@ struct OnboardingView: View {
         case .createCustomize:
             OnboardingCreateCustomizeStepView(viewModel: editViewModel)
         case .createEditor:
-            OnboardingCreateEditorStepView(viewModel: editViewModel)
+            OnboardingCreateEditorStepView(viewModel: editViewModel) {
+                viewModel.goNext()
+            }
         case .createCelebrate:
-            OnboardingCreateCelebrateStepView()
+            OnboardingCreateCelebrateStepView(viewModel: editViewModel)
         case .paywall:
             OnboardingPaywallStepView(viewModel: viewModel)
         }
@@ -92,19 +101,14 @@ struct OnboardingView: View {
     }
 
     private var footer: some View {
-        let isDisabled = !viewModel.canGoNext || isCreatingFirstActivity
+        let isDisabled = !viewModel.canGoNext
         return Button {
             advance()
         } label: {
-            Group {
-                if isCreatingFirstActivity {
-                    ProgressView().tint(.white)
-                } else {
-                    Text(continueTitle).fontWeight(.semibold)
-                }
-            }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
+            Text(continueTitle)
+                .fontWeight(.semibold)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .liquidGlassCard(tint: .yellow, cornerRadius: 20, interactive: true)
             .opacity(isDisabled ? 0.4 : 1)
@@ -121,8 +125,8 @@ struct OnboardingView: View {
         switch viewModel.currentStep {
         case .welcome: "Get Started"
         case .notifications: "Enable Notifications"
-        case .createEditor: "Create It"
-        case .questionForgot, .questionRemembered, .createIntro, .createChooseType, .createCustomize, .createCelebrate, .paywall: "Continue"
+        // .createEditor never shows this footer (see body) — its own Send button drives .goNext().
+        case .questionForgot, .questionRemembered, .createIntro, .createChooseType, .createCustomize, .createEditor, .createCelebrate, .paywall: "Continue"
         }
     }
 
@@ -131,15 +135,6 @@ struct OnboardingView: View {
         case .notifications:
             Task {
                 await OnboardingNotificationPermission.request()
-                viewModel.goNext()
-            }
-        case .createEditor:
-            guard editViewModel.draft.isValid else { viewModel.goNext(); return }
-            isCreatingFirstActivity = true
-            Task {
-                editViewModel.saveDraft(store: store)
-                _ = await editViewModel.send(store: store)
-                isCreatingFirstActivity = false
                 viewModel.goNext()
             }
         default:
