@@ -37,8 +37,14 @@ struct OnboardingView: View {
             .allowsHitTesting(viewModel.currentStep != .createEditor)
 
             if viewModel.currentStep == .createEditor {
+                // No .ignoresSafeArea() here — CreateActivityV2View already handles its own
+                // safe area internally (.statusBarHidden(true) + its own screenBackground
+                // .ignoresSafeArea()), tuned for being the app's actual root screen. Wrapping it
+                // in a second, outer .ignoresSafeArea() double-applied that and threw off the
+                // safe-area-relative geometry its sheet's presentationDetents math depends on —
+                // that's what was misaligning the sheet and making the keyboard-driven resize
+                // look unanimated instead of smooth.
                 OnboardingCreateEditorStepView(viewModel: editViewModel, isAwaitingContinue: $isEditorAwaitingContinue)
-                    .ignoresSafeArea()
                     .transition(.blurReplace)
 
                 // The shared Continue button, floated over the real editor's own success state
