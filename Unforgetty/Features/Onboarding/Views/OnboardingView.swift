@@ -12,29 +12,45 @@ struct OnboardingView: View {
     @State private var isEditorAwaitingContinue = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-                .opacity(hidesChrome ? 0 : 1)
+        // .createEditor can't just hide the header/footer with opacity like every other step
+        // does — opacity-hiding still reserves their layout space, so the embedded
+        // CreateActivityV2View only ever got the *middle* of the screen (between that reserved
+        // space), not the full screen the real editor actually renders at. That mismatch was the
+        // white bands above/below it, AND the reason its sheet's presentationDetents math (which
+        // reads its own measured container size) was wrong — never a full-screen container to
+        // measure. So instead: the whole normal chrome is a separate ZStack layer, and
+        // .createEditor renders as its own full-screen layer on top, ignoring the parent
+        // entirely, same as the real editor does when it's the app's actual root screen.
+        ZStack {
+            VStack(spacing: 0) {
+                header
+                Spacer(minLength: 0)
+                stepContent
+                    .transition(.blurReplace)
+                    .id(viewModel.currentStep)
+                Spacer(minLength: 0)
+                if viewModel.currentStep != .paywall && viewModel.currentStep != .createEditor {
+                    footer
+                }
+            }
+            .opacity(viewModel.currentStep == .createEditor ? 0 : 1)
+            .allowsHitTesting(viewModel.currentStep != .createEditor)
 
-            Spacer(minLength: 0)
+            if viewModel.currentStep == .createEditor {
+                OnboardingCreateEditorStepView(viewModel: editViewModel, isAwaitingContinue: $isEditorAwaitingContinue)
+                    .ignoresSafeArea()
+                    .transition(.blurReplace)
 
-            stepContent
-                .transition(.blurReplace)
-                .id(viewModel.currentStep)
-
-            Spacer(minLength: 0)
-
-            // .paywall supplies its own complete bottom purchase UI, so the footer is fully
-            // removed there (no adjacent layout to keep stable against). .createEditor is
-            // different: it's a full-bleed takeover of the real editor sheet — "everything fades
-            // to opacity 0" per spec — so it's hidden via opacity like the header, not removed,
-            // and disabled so it isn't a hidden tap target, until the activity is actually sent
-            // (isEditorAwaitingContinue), at which point the Continue button reappears in place
-            // of the real screen's own auto-timeout-then-return-to-grid behavior.
-            if viewModel.currentStep != .paywall {
-                footer
-                    .opacity(hidesChrome ? 0 : 1)
-                    .disabled(hidesChrome)
+                // The shared Continue button, floated over the real editor's own success state
+                // once it's sent — nothing else from the normal chrome (no header/progress bar)
+                // reappears here, just this one button, per spec.
+                if isEditorAwaitingContinue {
+                    VStack {
+                        Spacer(minLength: 0)
+                        footer
+                    }
+                    .transition(.opacity)
+                }
             }
         }
         .animation(.snappy, value: viewModel.currentStep)
@@ -45,10 +61,6 @@ struct OnboardingView: View {
         .onChange(of: viewModel.hasFinishedOnboarding) { _, finished in
             if finished { flow.showRoot() }
         }
-    }
-
-    private var hidesChrome: Bool {
-        viewModel.currentStep == .createEditor && !isEditorAwaitingContinue
     }
 
     @ViewBuilder
@@ -73,7 +85,8 @@ struct OnboardingView: View {
         case .createChooseType:
             OnboardingCreateChooseTypeStepView(viewModel: editViewModel)
         case .createEditor:
-            OnboardingCreateEditorStepView(viewModel: editViewModel, isAwaitingContinue: $isEditorAwaitingContinue)
+            // Rendered as its own full-screen ZStack layer in `body` instead, not here.
+            EmptyView()
         case .paywall:
             OnboardingPaywallStepView(viewModel: viewModel)
         }
@@ -131,8 +144,8 @@ struct OnboardingView: View {
         switch viewModel.currentStep {
         case .welcome: "Get Started"
         case .notifications: "Enable Notifications"
-        // .createEditor's footer stays hidden until the activity is actually sent (see
-        // hidesChrome) — "Continue" is what it shows once it reappears at that point.
+        // .createEditor's footer only floats over the real editor once it's sent
+        // (isEditorAwaitingContinue) — "Continue" is what it shows at that point.
         case .questionForgot, .questionRemembered, .createIntro, .createChooseType, .createEditor, .paywall: "Continue"
         }
     }
