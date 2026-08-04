@@ -58,6 +58,7 @@ final class AppFlowViewModel: ObservableObject {
 
     func showRoot() { destination = .root }
     func showPaywall() { isShowingPaywall = true }
+    func showOnboarding() { destination = .onboarding }
 
     func handleOpenURL(_ url: URL) {
         guard url.scheme == "unforgetty", url.host == "friend-ping" else { return }

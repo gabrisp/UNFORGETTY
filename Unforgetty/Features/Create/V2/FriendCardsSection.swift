@@ -134,9 +134,6 @@ struct FriendCardsSection: View {
                     .foregroundStyle(.secondary)
             }
         }
-        // Never interactive (no text input, no buttons — the whole card's tap target is handled
-        // outside this content by CardAnimationSlot), so this is always safe to flatten.
-        .drawingGroup()
     }
 
     private static let dateFormatter: DateFormatter = {

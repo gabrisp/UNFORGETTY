@@ -6,6 +6,7 @@ import UserNotifications
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var flow: AppFlowViewModel
     @State private var userID: String?
     @State private var targetID: String?
     @State private var statusMessage: String?
@@ -79,6 +80,14 @@ struct SettingsView: View {
                             isStatusError = false
                             statusMessage = "Identity reset."
                         }
+                    }
+                    .disabled(isRegistering)
+
+                    Button("Reset onboarding", role: .destructive) {
+                        UserDefaults.standard.removeObject(forKey: "hasFinishedOnboarding")
+                        UserDefaults.standard.removeObject(forKey: "onboardingCurrentStep.v1")
+                        dismiss()
+                        flow.showOnboarding()
                     }
                     .disabled(isRegistering)
 

@@ -346,13 +346,13 @@ struct CreateActivityV2View: View {
                 showsStatusPill: !isEditingSubsheet
             )
         } else {
-            // Purely a static preview — flattening it into one rasterized layer means the
-            // scale/offset/opacity transform animating it away only has to move a single texture
-            // each frame, instead of recompositing its text/gradient/border/shadow stack every
-            // frame. This is where most of the animation's actual cost was: every OTHER card in
-            // the grid (not just the one being opened) animates simultaneously on every selection.
+            // NOT flattened with .drawingGroup(): Liquid Glass's .glassEffect() (used for
+            // .plain-background cards, the most common case, via liquidGlassCard) is a live
+            // compositor effect that samples the real backdrop behind it — rasterizing into an
+            // isolated offscreen texture left it with nothing to sample, rendering as transparent
+            // instead of tinted glass. Correctness over the animation-recompositing optimization
+            // this used to buy.
             ActivityPreviewView(draft: activity.draft)
-                .drawingGroup()
         }
     }
 
