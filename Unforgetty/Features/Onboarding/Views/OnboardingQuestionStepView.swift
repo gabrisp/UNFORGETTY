@@ -1,0 +1,54 @@
+import SwiftUI
+
+/// Shared shape for both pain-point questions ("forgot something important" / "thought of
+/// someone") — same single-select option-row UI, parameterized by copy and the bound answer, so
+/// adding a third question later is just another call site, not another near-identical view.
+struct OnboardingQuestionStepView: View {
+    let question: String
+    @Binding var answer: OnboardingAnswer?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text(question)
+                .font(.title.bold())
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: 10) {
+                ForEach(OnboardingAnswer.allCases) { option in
+                    optionRow(option)
+                }
+            }
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private func optionRow(_ option: OnboardingAnswer) -> some View {
+        let isSelected = answer == option
+        return Button {
+            Haptics.selection()
+            answer = option
+        } label: {
+            HStack {
+                Text(option.title)
+                    .foregroundStyle(.primary)
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.tint)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(isSelected ? Color.accentColor.opacity(0.14) : Color.secondary.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.18), lineWidth: isSelected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
