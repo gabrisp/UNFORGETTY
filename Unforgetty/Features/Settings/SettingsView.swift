@@ -20,7 +20,6 @@ struct SettingsView: View {
     @StateObject private var social = SocialSettingsModel()
     @StateObject private var spotify = SpotifySettingsModel()
     @State private var isShowingDisconnectSpotifyConfirm = false
-    @State private var isRefreshing = false
 
     private static let termsOfUseURL = URL(string: "https://www.apple.com/legal/internetservices/itunes/dev/stdeula/")!
     // PLACEHOLDER — same caveat as PremiumView's own copy of this URL: must be replaced with a
@@ -195,22 +194,16 @@ struct SettingsView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .refreshable {
-            await refreshAll()
-        }
+        // Without this, plain-text Buttons/Links in a List default to the system accent (blue) —
+        // Rate/Manage Subscription/Force Register Device/Restore Purchases should all read as
+        // normal text, not links.
+        .tint(.primary)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    Haptics.light()
-                    Task { await refreshAll() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .disabled(isRefreshing)
-            }
-        }
+        // Pushed onto a tab's own NavigationStack (see CreateActivityV2View) — the ancestor
+        // TabView's .toolbar(.hidden, for: .tabBar) doesn't automatically carry over to pushed
+        // destinations, so it has to be repeated here or the tab bar reappears on this screen.
+        .toolbar(.hidden, for: .tabBar)
         .overlay {
             if isRegistering {
                 ZStack {
@@ -240,16 +233,10 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
         }
         .task {
-            await refreshAll()
+            await refresh()
+            await social.refresh()
+            await spotify.refresh()
         }
-    }
-
-    private func refreshAll() async {
-        isRefreshing = true
-        defer { isRefreshing = false }
-        await refresh()
-        await social.refresh()
-        await spotify.refresh()
     }
 
     @ViewBuilder
@@ -470,6 +457,7 @@ private struct SettingsPlanView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .tint(.primary)
         .navigationTitle("Your Plan")
         .navigationBarTitleDisplayMode(.inline)
     }

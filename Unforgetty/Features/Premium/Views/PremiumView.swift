@@ -50,13 +50,42 @@ struct PremiumView: View {
             // exactly that value with `.frame(width:)` — a fixed width, unlike `maxWidth`, cannot
             // be exceeded by anything inside it no matter what that content demands.
             GeometryReader { proxy in
-                VStack(spacing: 0) {
+                ZStack(alignment: .bottom) {
                     PaywallMarqueeShowcase()
                         .padding(.horizontal, -16)
+                        // Pushed up past the top safe area on purpose — the marquee reads as
+                        // scrolling content that bleeds off the top of the screen, faded out by
+                        // the mask below rather than hard-cropped.
+                        .padding(.top, -90)
                         .frame(width: proxy.size.width)
-                        .clipped()
-
-                    Spacer(minLength: 0)
+                        // Chained masks compose multiplicatively — this fades left/right edges
+                        // and the top edge, but stays fully opaque at the bottom (no fade there,
+                        // it transitions straight into bottomPurchaseOverlay below).
+                        .mask {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .clear, location: 0),
+                                    .init(color: .black, location: 0.06),
+                                    .init(color: .black, location: 0.94),
+                                    .init(color: .clear, location: 1)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        }
+                        .mask {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .clear, location: 0),
+                                    .init(color: .black, location: 0.12),
+                                    .init(color: .black, location: 1)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        }
+                        .ignoresSafeArea(edges: .top)
+                        .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
 
                     if !store.isPremium {
                         bottomPurchaseOverlay
