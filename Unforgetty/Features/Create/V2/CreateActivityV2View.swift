@@ -129,24 +129,6 @@ struct CreateActivityV2View: View {
                         } else {
                             activityKindMenu
                         }
-                    } else if !isActivitySelected && !editViewModel.isFriendPingSelected {
-                        cardSourceMenu
-
-                        // Adding a new activity only makes sense in Stack (own) mode — hidden
-                        // entirely rather than just disabled while browsing Friend pings.
-                        if editViewModel.cardSource == .own {
-                            Button("Add", systemImage: "plus") {
-                                Haptics.light()
-                                withAnimation(animation) {
-                                    select(store.createLiveActivityDraft())
-                                }
-                            }
-                        }
-
-                        Button("Settings", systemImage: "gearshape") {
-                            Haptics.light()
-                            editViewModel.isShowingSettings = true
-                        }
                     }
 
 //                    if isActivitySelected {
@@ -175,6 +157,36 @@ struct CreateActivityV2View: View {
 //                        .controlSize(.large)
 //                        .tint(.yellow)
 //                    }
+                }
+
+                // Separate spaced groups (not one ToolbarItemGroup) so ToolbarSpacer can actually
+                // sit between them — order is Add, Stack/Friend, Settings.
+                if isBrowsingGridToolbar {
+                    // Adding a new activity only makes sense in Stack (own) mode — hidden
+                    // entirely rather than just disabled while browsing Friend pings.
+                    if editViewModel.cardSource == .own {
+                        ToolbarItemGroup(placement: .topBarTrailing) {
+                            Button("Add", systemImage: "plus") {
+                                Haptics.light()
+                                withAnimation(animation) {
+                                    select(store.createLiveActivityDraft())
+                                }
+                            }
+                        }
+                        ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                    }
+
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        cardSourceMenu
+                    }
+                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
+
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button("Settings", systemImage: "gearshape") {
+                            Haptics.light()
+                            editViewModel.isShowingSettings = true
+                        }
+                    }
                 }
             }
             // `onScrollGeometryChange`'s `action` only fires when the *transformed* value changes —
@@ -418,6 +430,10 @@ struct CreateActivityV2View: View {
 
     private var showsEditingToolbarButtons: Bool {
         isActivitySelected && editViewModel.editSubSheet == nil && !editViewModel.isKeyboardVisible && editViewModel.successMessage == nil
+    }
+
+    private var isBrowsingGridToolbar: Bool {
+        !editViewModel.isKeyboardVisible && !isActivitySelected && !editViewModel.isFriendPingSelected
     }
 
     private func switchCardSource(_ source: CardSource) {

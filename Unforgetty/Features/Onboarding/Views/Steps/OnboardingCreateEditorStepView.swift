@@ -16,5 +16,12 @@ struct OnboardingCreateEditorStepView: View {
             isOnboarding: true,
             onboardingSendCompleted: { isAwaitingContinue = true }
         )
+        // Matches ContentView.swift's own `.ignoresSafeArea(.keyboard)` on this exact view — its
+        // real call site is shielded from keyboard-driven layout shifts, so its sheet's
+        // presentationDetents (computed from measured container size) never recompute mid-typing.
+        // Without this here too, the keyboard shrinks this view's measured geometry the instant
+        // you start typing, and the sheet visibly jumps to match — a discrepancy from the real
+        // screen, not a pixel-for-pixel copy of it.
+        .ignoresSafeArea(.keyboard)
     }
 }
