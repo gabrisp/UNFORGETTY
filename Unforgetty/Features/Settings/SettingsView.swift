@@ -10,13 +10,13 @@ import UserNotifications
 struct SettingsView: View {
     @EnvironmentObject private var flow: AppFlowViewModel
     @EnvironmentObject private var store: ActivityStore
-    @Environment(\.requestReview) private var requestReview
     @State private var userID: String?
-    @State private var targetID: String?
     @State private var statusMessage: String?
     @State private var isStatusError = false
     @State private var isRegistering = false
     @State private var debugPayload: String?
+    // Unused while the Social section above is commented out — kept ready for when it's
+    // re-enabled rather than deleted alongside it.
     @StateObject private var social = SocialSettingsModel()
     @StateObject private var spotify = SpotifySettingsModel()
     @State private var isShowingDisconnectSpotifyConfirm = false
@@ -25,57 +25,72 @@ struct SettingsView: View {
     // PLACEHOLDER — same caveat as PremiumView's own copy of this URL: must be replaced with a
     // real hosted privacy policy before release.
     private static let privacyPolicyURL = URL(string: "https://example.com")!
+    // PLACEHOLDER — 0000000000 must be replaced with Unforgetty's real numeric App Store ID once
+    // the app has one (App Store Connect assigns it on first upload). This link format
+    // (?action=write-review) takes the user straight to the "write a review" screen in the App
+    // Store app, unlike SKStoreReviewController's in-app star-only prompt.
+    private static let appStoreWriteReviewURL = URL(string: "https://apps.apple.com/app/id0000000000?action=write-review")!
 
     var body: some View {
         List {
             Section {
-                NavigationLink {
-                    SocialDetailView(model: social)
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "person.2.fill")
-                            .font(.title3)
-                            .foregroundStyle(.yellow)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Social")
-                                .font(.headline)
-                            Text(social.username.map { "@\($0)" } ?? "Sin username")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-
-                        if !social.pendingRequests.isEmpty {
-                            Text("\(social.pendingRequests.count)")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(.white)
-                                .frame(minWidth: 20, minHeight: 20)
-                                .background(Circle().fill(.red))
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-
-            Section {
                 proBanner
             }
 
+            // Social — commented out for now, not deleted; re-enable by uncommenting this
+            // section (SocialSettingsModel/SocialDetailView are unchanged and ready).
+            // Section {
+            //     NavigationLink {
+            //         SocialDetailView(model: social)
+            //     } label: {
+            //         HStack(spacing: 12) {
+            //             Image(systemName: "person.2.fill")
+            //                 .font(.title3)
+            //                 .foregroundStyle(.yellow)
+            //
+            //             VStack(alignment: .leading, spacing: 2) {
+            //                 Text("Social")
+            //                     .font(.headline)
+            //                 Text(social.username.map { "@\($0)" } ?? "Sin username")
+            //                     .font(.caption)
+            //                     .foregroundStyle(.secondary)
+            //             }
+            //
+            //             Spacer()
+            //
+            //             if !social.pendingRequests.isEmpty {
+            //                 Text("\(social.pendingRequests.count)")
+            //                     .font(.caption2.weight(.bold))
+            //                     .foregroundStyle(.white)
+            //                     .frame(minWidth: 20, minHeight: 20)
+            //                     .background(Circle().fill(.red))
+            //             }
+            //         }
+            //         .padding(.vertical, 4)
+            //     }
+            // }
+
+            Section("Music Accounts") {
+                spotifyRow
+
+                if let statusMessage = spotify.statusMessage {
+                    Text(statusMessage)
+                        .font(.footnote)
+                        .foregroundStyle(spotify.isStatusError ? .red : .secondary)
+                }
+            }
+            .textCase(nil)
+
             Section("Application") {
-                Link(destination: Self.termsOfUseURL) {
+                LegalDocumentButton(url: Self.termsOfUseURL) {
                     SettingsGlyphLabel(title: "Terms", systemName: "doc.text.fill", tint: .gray)
                 }
-                Link(destination: Self.privacyPolicyURL) {
+                LegalDocumentButton(url: Self.privacyPolicyURL) {
                     SettingsGlyphLabel(title: "Privacy", systemName: "hand.raised.fill", tint: .gray)
                 }
-                Button {
-                    requestReview()
-                } label: {
+                Link(destination: Self.appStoreWriteReviewURL) {
                     SettingsGlyphLabel(title: "Rate Unforgetty", systemName: "star.fill", tint: .yellow)
                 }
-                .buttonStyle(.plain)
             }
             .textCase(nil)
 
@@ -108,20 +123,26 @@ struct SettingsView: View {
             }
             .textCase(nil)
 
-            Section("Music Accounts") {
-                spotifyRow
-
-                if let statusMessage = spotify.statusMessage {
-                    Text(statusMessage)
-                        .font(.footnote)
-                        .foregroundStyle(spotify.isStatusError ? .red : .secondary)
-                }
-            }
-            .textCase(nil)
-
             Section("Debug") {
-                LabeledContent("User ID", value: userID ?? "—")
-                LabeledContent("Target ID", value: targetID ?? "—")
+                HStack {
+                    Text("User ID")
+                    Spacer(minLength: 12)
+                    Text(userID ?? "—")
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if userID != nil {
+                        Button {
+                            #if canImport(UIKit)
+                            UIPasteboard.general.string = userID
+                            #endif
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                    }
+                }
 
                 if let statusMessage {
                     Text(statusMessage)
@@ -129,11 +150,14 @@ struct SettingsView: View {
                         .foregroundStyle(isStatusError ? .red : .secondary)
                 }
 
+                // Combines the old separate "reset identity" + "register" actions into one —
+                // resetting without re-registering (or vice versa) was never actually useful on
+                // its own, just two taps to do one thing.
                 Button {
-                    Task { await forceRegister() }
+                    Task { await forceRegisterDevice() }
                 } label: {
                     HStack {
-                        Text("Force Appwrite register")
+                        Text("Force Register Device")
                         if isRegistering {
                             Spacer()
                             ProgressView()
@@ -142,22 +166,14 @@ struct SettingsView: View {
                 }
                 .disabled(isRegistering)
 
-                Button("Reset identity", role: .destructive) {
-                    Task {
-                        await AppwritePushIdentity.shared.resetIdentity()
-                        await refresh()
-                        isStatusError = false
-                        statusMessage = "Identity reset."
-                    }
-                }
-                .disabled(isRegistering)
-
+                #if DEBUG
                 Button("Reset onboarding", role: .destructive) {
                     UserDefaults.standard.removeObject(forKey: "hasFinishedOnboarding")
                     UserDefaults.standard.removeObject(forKey: "onboardingCurrentStep.v1")
                     flow.showOnboarding()
                 }
                 .disabled(isRegistering)
+                #endif
 
                 if let debugPayload {
                     VStack(alignment: .leading, spacing: 6) {
@@ -184,7 +200,6 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .preferredColorScheme(.dark)
         .overlay {
             if isRegistering {
                 ZStack {
@@ -310,15 +325,20 @@ struct SettingsView: View {
 
     private func refresh() async {
         userID = await AppwritePushIdentity.shared.storedUserID()
-        targetID = await AppwritePushIdentity.shared.pushTargetID()
     }
 
-    private func forceRegister() async {
+    /// Deletes the existing device identity and creates a completely new one, then re-registers
+    /// it for push — replaces the old separate "reset identity" / "force register" buttons, which
+    /// were never actually useful apart from each other.
+    private func forceRegisterDevice() async {
         isRegistering = true
         isStatusError = false
         defer { isRegistering = false }
 
-        statusMessage = "Registering user…"
+        statusMessage = "Resetting identity…"
+        await AppwritePushIdentity.shared.resetIdentity()
+
+        statusMessage = "Registering new user…"
         do {
             userID = try await AppwritePushIdentity.shared.ensureAnonymousUser()
         } catch {
@@ -334,7 +354,7 @@ struct SettingsView: View {
         let granted = (try? await center.requestAuthorization(options: [.alert, .badge, .sound])) ?? false
         guard granted else {
             isStatusError = true
-            statusMessage = "Notifications not authorized, so no target can be registered."
+            statusMessage = "Notifications not authorized, so no device could be registered."
             return
         }
 
@@ -345,14 +365,13 @@ struct SettingsView: View {
 
         for _ in 0..<20 {
             try? await Task.sleep(nanoseconds: 500_000_000)
-            if let target = await AppwritePushIdentity.shared.pushTargetID() {
-                targetID = target
-                statusMessage = "Target registered."
+            if await AppwritePushIdentity.shared.pushTargetID() != nil {
+                statusMessage = "Device registered."
                 return
             }
         }
         isStatusError = true
-        statusMessage = "Still no target after 10s — check the Xcode console for the APNs registration error."
+        statusMessage = "Still not registered after 10s — check the Xcode console for the APNs registration error."
         debugPayload = await AppwritePushIdentity.shared.debugPayload()
         #else
         statusMessage = "User OK (\(userID ?? "?"))."

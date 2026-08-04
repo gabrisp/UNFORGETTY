@@ -101,8 +101,8 @@ struct OnboardingPaywallStepView: View {
                 Button("Redeem Code") {
                     presentedSheet = .redeemCode
                 }
-                Link("Terms", destination: Self.termsOfUseURL)
-                Link("Privacy", destination: Self.privacyPolicyURL)
+                LegalDocumentButton(url: Self.termsOfUseURL) { Text("Terms") }
+                LegalDocumentButton(url: Self.privacyPolicyURL) { Text("Privacy") }
             }
             .buttonStyle(.plain)
             .font(.footnote)

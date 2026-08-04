@@ -112,7 +112,6 @@ struct MusicPickerSheet: View {
         }
         .foregroundStyle(.white)
         .tint(.yellow)
-        .preferredColorScheme(.dark)
         .task {
             await refreshStatus()
         }

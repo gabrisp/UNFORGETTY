@@ -6,7 +6,7 @@ import SwiftUI
 /// Settings > Social) rather than duplicating that logic in a second place.
 struct FriendRequestsSheet: View {
     @StateObject private var social = SocialSettingsModel()
-    let onDone: () -> Void
+    @State private var isRefreshing = false
 
     var body: some View {
         NavigationStack {
@@ -16,13 +16,27 @@ struct FriendRequestsSheet: View {
             .navigationTitle("Friends")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { onDone() }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        Haptics.light()
+                        Task { await refresh() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .disabled(isRefreshing)
                 }
             }
-            .refreshable { await social.refresh() }
+            .refreshable { await refresh() }
         }
-        .task { await social.refresh() }
-        .preferredColorScheme(.dark)
+        // A "Done" button was redundant here — swipe-to-dismiss (never disabled on this sheet)
+        // already closes it.
+        .presentationDetents([.medium, .large])
+        .task { await refresh() }
+    }
+
+    private func refresh() async {
+        isRefreshing = true
+        defer { isRefreshing = false }
+        await social.refresh()
     }
 }

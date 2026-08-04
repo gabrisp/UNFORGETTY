@@ -81,7 +81,6 @@ struct CreateActivityV2EditSheet: View {
         }
         .foregroundStyle(.white)
         .tint(.yellow)
-        .preferredColorScheme(.dark)
         .background {
             sheetGlassBackground
         }
@@ -562,7 +561,6 @@ struct CreateActivityV2EditSheet: View {
                 .padding()
                 .frame(width: 300, alignment: .leading)
                 .background(.black.opacity(0.86))
-                .preferredColorScheme(.dark)
                 .presentationCompactAdaptation(.popover)
         }
     }
@@ -744,7 +742,6 @@ private struct ActivityLocationPicker: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
     }
 
     private func selectCompletion(_ completion: MKLocalSearchCompletion) {

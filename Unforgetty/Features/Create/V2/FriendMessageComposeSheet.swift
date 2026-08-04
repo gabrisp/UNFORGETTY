@@ -59,7 +59,6 @@ struct FriendMessageComposeSheet: View {
         }
         .foregroundStyle(.white)
         .tint(.yellow)
-        .preferredColorScheme(.dark)
     }
 
     private var recipientsSection: some View {

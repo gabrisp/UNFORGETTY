@@ -268,9 +268,7 @@ struct CreateActivityV2View: View {
             }
         }
         .sheet(item: friendRequestsSheetBinding) { _ in
-            FriendRequestsSheet {
-                editViewModel.presentedGridSheet = nil
-            }
+            FriendRequestsSheet()
         }
         .sheet(item: $editViewModel.presentedSheetActivity) { activity in
             let spacing: CGFloat = 20
@@ -1358,7 +1356,6 @@ private struct LiveActionItemEditSheet: View {
 	        }
             .foregroundStyle(.white)
             .tint(.yellow)
-            .preferredColorScheme(.dark)
             .toolbarBackground(.clear, for: .navigationBar)
             .sensoryFeedback(.selection, trigger: feedbackTrigger)
             .sensoryFeedback(.selection, trigger: currentAction?.kind)

@@ -123,8 +123,8 @@ struct PremiumView: View {
                     presentedSheet = .redeemCode
                 }
 
-                Link("Términos", destination: Self.termsOfUseURL)
-                Link("Privacidad", destination: Self.privacyPolicyURL)
+                LegalDocumentButton(url: Self.termsOfUseURL) { Text("Términos") }
+                LegalDocumentButton(url: Self.privacyPolicyURL) { Text("Privacidad") }
             }
             .buttonStyle(.plain)
             .font(.footnote)

@@ -92,7 +92,6 @@ struct FriendPickerSheet: View {
         }
         .foregroundStyle(.white)
         .tint(.yellow)
-        .preferredColorScheme(.dark)
         .task {
             await refresh()
         }

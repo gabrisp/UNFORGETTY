@@ -173,7 +173,6 @@ struct StyleEditorView<VM: DraftEditingViewModel>: View {
         }
         .foregroundStyle(.white)
         .tint(.yellow)
-        .preferredColorScheme(.dark)
         .onAppear {
             viewModel.draft.style.textSize = textSizeBinding.wrappedValue
             if viewModel.draft.kind != .image, viewModel.draft.style.backgroundMode == .image {
