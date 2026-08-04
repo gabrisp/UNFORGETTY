@@ -59,7 +59,9 @@ struct CreateActivityV2View: View {
             .scrollIndicators(.hidden)
             .safeAreaPadding(15)
             .scrollDisabled(isActivitySelected || editViewModel.isFriendPingSelected)
-            .safeAreaBar(edge: .bottom) {
+            // .safeAreaBar (not used here) minimizes/reveals on scroll like a system tab bar —
+            // .safeAreaInset just reserves the space and pins the content, no scroll reactivity.
+            .safeAreaInset(edge: .bottom) {
                 if !isActivitySelected && !editViewModel.isFriendPingSelected && !isOnboarding {
                     upgradeBar
                 }
