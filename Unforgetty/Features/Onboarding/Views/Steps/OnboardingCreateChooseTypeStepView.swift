@@ -1,8 +1,14 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
-/// Type selection with a live, read-only example underneath — `ActivityPreviewView` re-renders
-/// automatically as `viewModel.draft.kind` changes, so picking a different type visibly swaps the
-/// example design without letting the user start typing into it yet (that's `OnboardingCreateEditorStepView`).
+/// Type selection with a live, read-only example underneath — re-renders as `viewModel.draft.kind`
+/// changes, so picking a different type visibly swaps the example design without letting the user
+/// start typing into it yet (that's `OnboardingCreateEditorStepView`). The preview intentionally
+/// renders a synthetic `exampleDraft`, NOT `viewModel.draft` itself — the real draft stays blank
+/// here so the user's actual first activity doesn't start pre-filled with this placeholder copy
+/// once they reach the editor step; only `kind` (set via `setKind`) carries forward.
 struct OnboardingCreateChooseTypeStepView: View {
     @ObservedObject var viewModel: CreateActivityV2EditViewModel
 
@@ -18,9 +24,36 @@ struct OnboardingCreateChooseTypeStepView: View {
 
             kindPicker
 
-            ActivityPreviewView(draft: viewModel.draft)
+            ActivityPreviewView(draft: exampleDraft(for: viewModel.draft.kind))
                 .padding(.horizontal, 24)
         }
+    }
+
+    private func exampleDraft(for kind: ActivityKind) -> LiveActivityDraft {
+        var draft = LiveActivityDraft()
+        draft.kind = kind
+        switch kind {
+        case .note:
+            draft.body = "Write anything you want :)"
+        case .image:
+            // No generic bundled "example photo" asset exists — reusing one of the bundled music
+            // preview images as a stand-in still shows a real photo filling the card, which reads
+            // better than the bare "no photo yet" placeholder icon.
+            #if canImport(UIKit)
+            draft.style.backgroundImageData = UIImage(named: "prev_music_1")?.jpegData(compressionQuality: 0.9)
+            #endif
+        case .music:
+            draft.musicTitle = "Your favorite song"
+            draft.musicArtist = "Any artist"
+            #if canImport(UIKit)
+            draft.musicAlbumArtData = UIImage(named: "prev_music_1")?.jpegData(compressionQuality: 0.9)
+            #endif
+        case .check(.todoList):
+            draft.checklistItems = [ChecklistItem(text: "Buy groceries"), ChecklistItem(text: "Call mom")]
+        case .check(.buttons):
+            break
+        }
+        return draft
     }
 
     private var kindPicker: some View {
@@ -48,6 +81,7 @@ struct OnboardingCreateChooseTypeStepView: View {
             .padding(.vertical, 10)
             .liquidGlassCard(tint: isSelected ? Color.yellow.opacity(0.35) : Color.secondary.opacity(0.1), cornerRadius: 14, interactive: true)
             .foregroundStyle(isSelected ? Color.yellow : Color.primary)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

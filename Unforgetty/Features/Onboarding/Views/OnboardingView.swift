@@ -78,12 +78,14 @@ struct OnboardingView: View {
                     .font(.body.weight(.semibold))
                     .frame(width: 36, height: 36)
                     .liquidGlassCard(tint: Color.secondary.opacity(0.15), cornerRadius: 18, interactive: true)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .opacity(viewModel.currentStep == .welcome ? 0 : 1)
             .disabled(viewModel.currentStep == .welcome)
 
             OnboardingProgressBar(currentStep: viewModel.currentStep)
+                .opacity(viewModel.currentStep == .welcome ? 0 : 1)
         }
         .padding(.horizontal, 20)
         .padding(.top, 12)
@@ -106,6 +108,7 @@ struct OnboardingView: View {
             .padding(.vertical, 14)
             .liquidGlassCard(tint: .yellow, cornerRadius: 20, interactive: true)
             .opacity(isDisabled ? 0.4 : 1)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)

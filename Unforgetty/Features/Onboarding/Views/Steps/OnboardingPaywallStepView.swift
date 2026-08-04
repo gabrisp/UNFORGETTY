@@ -89,6 +89,7 @@ struct OnboardingPaywallStepView: View {
                 .padding(.vertical, 14)
                 .liquidGlassCard(tint: .yellow, cornerRadius: 20, interactive: true)
                 .opacity(selectedProductID == nil || isPurchasing ? 0.4 : 1)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(selectedProductID == nil || isPurchasing)
@@ -185,6 +186,7 @@ private struct OnboardingPaywallPackageCardView: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(isSelected ? Color.yellow : Color.secondary.opacity(0.18), lineWidth: isSelected ? 2 : 1)
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity)

@@ -273,7 +273,7 @@ private struct PaywallShowcaseCardView: View {
         // (see ActivityPreviewView's liveActivityMaxHeight) — rather than intrinsic, so the
         // showcase reads as "this is literally what your Live Activity looks like."
         .fixedSize(horizontal: true, vertical: false)
-        .padding(.horizontal, 24)
+        .padding(.horizontal, 40)
         .frame(height: Self.cardHeight)
         .activityCardBackground(style: draft.style, kind: draft.kind, cornerRadius: 20)
         .overlay(alignment: .top) {

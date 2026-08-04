@@ -12,30 +12,31 @@ struct OnboardingWelcomeStepView: View {
     @State private var messageIndex = 0
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Clipped to a fixed height, shorter than the marquee's natural 3-row height — this is
-            // decorative background context for the headline below, not the focal point, and the
-            // full-height marquee (as used in PremiumView, which has no competing text underneath)
-            // was squeezing the headline/subtitle down to a truncated single line on smaller
-            // screens.
-            PaywallMarqueeShowcase()
-                .padding(.horizontal, -16)
-                .frame(maxWidth: .infinity)
-                .padding(.top, -32)
-            VStack(spacing: 12) {
-                Text(Self.messages[messageIndex].title)
-                    .font(.largeTitle.bold())
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.numericText())
-                Text(Self.messages[messageIndex].subtitle)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.numericText())
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                // Pinned to the bottom of whatever space this step is given (between the shared
+                // header and the shared footer button) rather than sitting centered — the leading
+                // Spacer expands to consume all the slack, so the content itself sinks to the floor.
+                PaywallMarqueeShowcase(rowCount: 3)
+                    .padding(.horizontal, -32)
+                    .frame(maxWidth: .infinity)
+                    
+                
+                VStack(spacing: 12) {
+                    Text(Self.messages[messageIndex].title)
+                        .font(.largeTitle.bold())
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.numericText())
+                    Text(Self.messages[messageIndex].subtitle)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.numericText())
+                }
+                .padding(.horizontal, 32)
             }
-            .padding(.horizontal, 32)
-            .padding(.top, 24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
         .task {
             while !Task.isCancelled {

@@ -45,6 +45,7 @@ struct OnboardingQuestionStepView: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(isSelected ? Color.yellow : Color.clear, lineWidth: 2)
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
