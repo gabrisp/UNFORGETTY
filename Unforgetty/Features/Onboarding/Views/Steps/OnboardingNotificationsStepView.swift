@@ -4,20 +4,23 @@ import UserNotifications
 
 struct OnboardingNotificationsStepView: View {
     var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "bell.badge.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(.tint)
+        VStack(spacing: 0) {
+            OnboardingV2NotificationsiPhoneView(iPhoneTint: .yellow)
+                .frame(maxWidth: .infinity)
+                .frame(height: 380)
 
-            Text("Stay in the loop")
-                .font(.title.bold())
-                .multilineTextAlignment(.center)
+            VStack(spacing: 12) {
+                Text("Stay in the loop")
+                    .font(.title.bold())
+                    .multilineTextAlignment(.center)
 
-            Text("Turn on notifications so friends, family, or your partner can reach you — and so your Live Activities can be scheduled and keep running without you having to think about it.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                Text("Turn on notifications so friends, family, or your partner can reach you — and so your Live Activities can be scheduled and keep running without you having to think about it.")
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 32)
+            .padding(.top, 12)
         }
-        .padding(.horizontal, 32)
     }
 }
 
