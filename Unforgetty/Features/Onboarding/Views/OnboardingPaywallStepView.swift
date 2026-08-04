@@ -36,10 +36,10 @@ struct OnboardingPaywallStepView: View {
                         .clipped()
 
                     VStack(spacing: 8) {
-                        Text("Unlock everything")
+                        Text("Ready to unlock all the potential?")
                             .font(.title.bold())
                             .multilineTextAlignment(.center)
-                        Text("Start your free trial to send unlimited pings, schedule ahead, and save everything you create.")
+                        Text("Never forget what matters — start your free trial to schedule ahead, send unlimited pings, and save everything you create.")
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.secondary)
                     }

@@ -1,34 +1,25 @@
 import SwiftUI
 
-/// Lets the user build their first real activity using the same editor components the main app
-/// uses (`LivePreviewView`, `StyleEditorView`) — not a mockup — driven by a
-/// `CreateActivityV2EditViewModel` the parent `OnboardingView` owns so the draft survives if this
-/// step is revisited via the back button.
-struct OnboardingCreateStepView: View {
+/// Type selection with a live, read-only example underneath — `ActivityPreviewView` re-renders
+/// automatically as `viewModel.draft.kind` changes, so picking a different type visibly swaps the
+/// example design without letting the user start typing into it yet (that's `OnboardingCreateEditorStepView`).
+struct OnboardingCreateChooseTypeStepView: View {
     @ObservedObject var viewModel: CreateActivityV2EditViewModel
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                VStack(spacing: 8) {
-                    Text("Create your first reminder")
-                        .font(.title.bold())
-                        .multilineTextAlignment(.center)
-                    Text("Design something you don't want to forget — we'll bring it to life right on your Lock Screen.")
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 24)
-
-                kindPicker
-
-                LivePreviewView(viewModel: viewModel)
-                    .padding(.horizontal, 24)
-
-                StyleEditorView(viewModel: viewModel)
-                    .padding(.horizontal, 24)
+        VStack(spacing: 24) {
+            VStack(spacing: 8) {
+                Text("Choose a type")
+                    .font(.title.bold())
+                    .multilineTextAlignment(.center)
+                Text("You can always change this later.")
+                    .foregroundStyle(.secondary)
             }
-            .padding(.vertical, 12)
+
+            kindPicker
+
+            ActivityPreviewView(draft: viewModel.draft)
+                .padding(.horizontal, 24)
         }
     }
 
@@ -57,9 +48,9 @@ struct OnboardingCreateStepView: View {
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(isSelected ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.08))
+                    .fill(isSelected ? Color.yellow.opacity(0.22) : Color.secondary.opacity(0.08))
             )
-            .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+            .foregroundStyle(isSelected ? Color.yellow : Color.primary)
         }
         .buttonStyle(.plain)
     }

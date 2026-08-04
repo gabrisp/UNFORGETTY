@@ -49,8 +49,16 @@ struct OnboardingView: View {
             )
         case .notifications:
             OnboardingNotificationsStepView()
-        case .createFirst:
-            OnboardingCreateStepView(viewModel: editViewModel)
+        case .createIntro:
+            OnboardingCreateIntroStepView()
+        case .createChooseType:
+            OnboardingCreateChooseTypeStepView(viewModel: editViewModel)
+        case .createCustomize:
+            OnboardingCreateCustomizeStepView(viewModel: editViewModel)
+        case .createEditor:
+            OnboardingCreateEditorStepView(viewModel: editViewModel)
+        case .createCelebrate:
+            OnboardingCreateCelebrateStepView()
         case .paywall:
             OnboardingPaywallStepView(viewModel: viewModel)
         }
@@ -90,6 +98,7 @@ struct OnboardingView: View {
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
+        .tint(.yellow)
         .disabled(!viewModel.canGoNext || isCreatingFirstActivity)
         .padding(.horizontal, 24)
         .padding(.bottom, 16)
@@ -100,8 +109,8 @@ struct OnboardingView: View {
         switch viewModel.currentStep {
         case .welcome: "Get Started"
         case .notifications: "Enable Notifications"
-        case .createFirst: "Continue"
-        case .questionForgot, .questionRemembered, .paywall: "Continue"
+        case .createEditor: "Create It"
+        case .questionForgot, .questionRemembered, .createIntro, .createChooseType, .createCustomize, .createCelebrate, .paywall: "Continue"
         }
     }
 
@@ -112,7 +121,7 @@ struct OnboardingView: View {
                 await OnboardingNotificationPermission.request()
                 viewModel.goNext()
             }
-        case .createFirst:
+        case .createEditor:
             guard editViewModel.draft.isValid else { viewModel.goNext(); return }
             isCreatingFirstActivity = true
             Task {
@@ -135,7 +144,7 @@ private struct OnboardingProgressBar: View {
         HStack(spacing: 6) {
             ForEach(OnboardingStep.allCases, id: \.self) { step in
                 Capsule()
-                    .fill(step.rawValue <= currentStep.rawValue ? Color.accentColor : Color.secondary.opacity(0.2))
+                    .fill(step.rawValue <= currentStep.rawValue ? Color.yellow : Color.secondary.opacity(0.2))
                     .frame(height: 4)
             }
         }

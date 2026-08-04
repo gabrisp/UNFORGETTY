@@ -8,7 +8,16 @@ enum OnboardingStep: Int, CaseIterable {
     case questionForgot
     case questionRemembered
     case notifications
-    case createFirst
+    // "Create your first activity" is broken into its own mini sequence rather than one crowded
+    // screen: an interstitial, then choose-type (with a live example), then customize, then the
+    // real content editor — each gets the user's full attention instead of competing for it.
+    case createIntro
+    case createChooseType
+    case createCustomize
+    case createEditor
+    // Shown right after `createEditor` actually starts the Live Activity (an immediate, one-off
+    // start — no scheduling ahead until the user unlocks Pro on the paywall step right after this).
+    case createCelebrate
     case paywall
 }
 
@@ -60,7 +69,7 @@ final class OnboardingViewModel: ObservableObject {
         case .questionForgot: forgotAnswer != nil
         case .questionRemembered: rememberedAnswer != nil
         case .notifications: true
-        case .createFirst: true
+        case .createIntro, .createChooseType, .createCustomize, .createEditor, .createCelebrate: true
         case .paywall: true
         }
     }
