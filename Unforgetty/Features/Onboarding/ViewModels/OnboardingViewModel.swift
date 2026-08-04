@@ -8,12 +8,11 @@ enum OnboardingStep: Int, CaseIterable {
     case questionForgot
     case questionRemembered
     case notifications
-    // "Create your first activity" is broken into its own mini sequence rather than one crowded
-    // screen: an interstitial, then choose-type (with a live example), then customize, then the
-    // real content editor — each gets the user's full attention instead of competing for it.
+    // "Create your first activity" is its own mini sequence: an interstitial, then choose-type
+    // (with a live example), then the real editor itself — no separate "customize" step, since
+    // personalizing IS what the real editor's Personalization tab already does.
     case createIntro
     case createChooseType
-    case createCustomize
     // Sends for real (an immediate, one-off start — no scheduling ahead until the user unlocks
     // Pro on the paywall step right after this) and, once sent, shows "It's live!" + the shared
     // Continue button in place of the sheet, still on this same step — no separate celebrate step.
@@ -69,7 +68,7 @@ final class OnboardingViewModel: ObservableObject {
         case .questionForgot: forgotAnswer != nil
         case .questionRemembered: rememberedAnswer != nil
         case .notifications: true
-        case .createIntro, .createChooseType, .createCustomize, .createEditor: true
+        case .createIntro, .createChooseType, .createEditor: true
         case .paywall: true
         }
     }

@@ -72,8 +72,6 @@ struct OnboardingView: View {
             OnboardingCreateIntroStepView()
         case .createChooseType:
             OnboardingCreateChooseTypeStepView(viewModel: editViewModel)
-        case .createCustomize:
-            OnboardingCreateCustomizeStepView(viewModel: editViewModel)
         case .createEditor:
             OnboardingCreateEditorStepView(viewModel: editViewModel, isAwaitingContinue: $isEditorAwaitingContinue)
         case .paywall:
@@ -135,7 +133,7 @@ struct OnboardingView: View {
         case .notifications: "Enable Notifications"
         // .createEditor's footer stays hidden until the activity is actually sent (see
         // hidesChrome) — "Continue" is what it shows once it reappears at that point.
-        case .questionForgot, .questionRemembered, .createIntro, .createChooseType, .createCustomize, .createEditor, .paywall: "Continue"
+        case .questionForgot, .questionRemembered, .createIntro, .createChooseType, .createEditor, .paywall: "Continue"
         }
     }
 
