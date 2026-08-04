@@ -33,7 +33,6 @@ struct OnboardingPaywallStepView: View {
                     PaywallMarqueeShowcase()
                         .padding(.horizontal, -16)
                         .frame(maxWidth: .infinity)
-                        .clipped()
 
                     VStack(spacing: 8) {
                         Text("Ready to unlock all the potential?")

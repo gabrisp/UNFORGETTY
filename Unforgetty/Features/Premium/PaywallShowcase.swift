@@ -37,6 +37,14 @@ enum PaywallShowcase {
         note("Birthday: Alex 🎂", gradientStart: "FFDEE9", gradientEnd: "B5FFFC", angle: 60, textHex: "1A1A2E", font: .rounded, alignment: .center)
     ]
 
+    static let cardsRowFour: [PaywallShowcaseCard] = [
+        note("Doctor's appointment 🩺", background: "10202A", textHex: "9FE8FF", font: .rounded, alignment: .leading),
+        checklist(["Pack for trip ✈️", "Charge headphones"], background: "2A2010", textHex: "FFE1A6", font: .monospaced),
+        music(imageName: "prev_music_1", title: "Midnight Drive", artist: "Nova Ray", album: "Cupido", background: "1A0F2E", textHex: "E0C9FF"),
+        note("Anniversary dinner ❤️", gradientStart: "FF9A9E", gradientEnd: "FAD0C4", angle: 110, textHex: "3A0A14", font: .serif, alignment: .center),
+        note("Submit expense report", background: "0E1F16", textHex: "B0FFD1", font: .rounded, alignment: .leading)
+    ]
+
     private static func note(
         _ text: String,
         background: String,
@@ -127,38 +135,44 @@ enum PaywallShowcase {
 }
 
 struct PaywallMarqueeShowcase: View {
+    /// How many of the (up to 4) marquee rows to show, from the top — pass 3/2/1 for a shorter
+    /// showcase (e.g. a tighter onboarding step); defaults to all 4.
+    var rowCount: Int = 4
+
     private let spacing: CGFloat = 14
     // Separate from `spacing` (card-to-card, within a row) — this is specifically the gap
-    // between the three stacked marquee rows.
+    // between the stacked marquee rows.
     private let rowSpacing: CGFloat = 4
+
+    private struct RowConfig {
+        let cards: [PaywallShowcaseCard]
+        let speed: Double
+        let reversed: Bool
+        let leadingPadding: CGFloat
+    }
+
+    // A fixed stagger per row rather than half a card-width — cards size to their own content
+    // (see MarqueeRow's doc comment), so there's no single "card width" left to derive a
+    // seam-aligned offset from. These are just constant visual offsets so rows don't start
+    // perfectly aligned with each other.
+    private static let rowConfigs: [RowConfig] = [
+        RowConfig(cards: PaywallShowcase.cardsRowOne, speed: 24, reversed: false, leadingPadding: 0),
+        RowConfig(cards: PaywallShowcase.cardsRowTwo, speed: 20, reversed: true, leadingPadding: 48),
+        RowConfig(cards: PaywallShowcase.cardsRowThree, speed: 27, reversed: false, leadingPadding: 24),
+        RowConfig(cards: PaywallShowcase.cardsRowFour, speed: 22, reversed: true, leadingPadding: 12)
+    ]
 
     var body: some View {
         VStack(spacing: rowSpacing) {
-            MarqueeRow(
-                cards: PaywallShowcase.cardsRowOne,
-                spacing: spacing,
-                speed: 24,
-                reversed: false,
-                leadingPadding: 0
-            )
-            MarqueeRow(
-                cards: PaywallShowcase.cardsRowTwo,
-                spacing: spacing,
-                speed: 20,
-                reversed: true,
-                // A fixed stagger rather than half a card-width — cards now size to their own
-                // content (see MarqueeRow's doc comment), so there's no single "card width" left to
-                // derive a seam-aligned offset from. This is just a constant visual offset so the
-                // two rows don't start perfectly aligned.
-                leadingPadding: 48
-            )
-            MarqueeRow(
-                cards: PaywallShowcase.cardsRowThree,
-                spacing: spacing,
-                speed: 27,
-                reversed: false,
-                leadingPadding: 24
-            )
+            ForEach(Array(Self.rowConfigs.prefix(max(1, min(rowCount, Self.rowConfigs.count)))).enumerated(), id: \.offset) { _, config in
+                MarqueeRow(
+                    cards: config.cards,
+                    spacing: spacing,
+                    speed: config.speed,
+                    reversed: config.reversed,
+                    leadingPadding: config.leadingPadding
+                )
+            }
         }
         .mask {
             LinearGradient(
@@ -189,8 +203,7 @@ private struct MarqueeRow: View {
     let leadingPadding: CGFloat
 
     // Headroom for the checklist cards' "TAP ME!" badge, which pops up above the card's own top
-    // edge — without this, the row's own `.clipped()` below (needed to hide the scroll wraparound
-    // seams) was cutting the badge off before it could be seen.
+    // edge.
     private let badgeHeadroom: CGFloat = 26
     private var rowHeight: CGFloat { PaywallShowcaseCardView.cardHeight + badgeHeadroom }
 
@@ -223,7 +236,6 @@ private struct MarqueeRow: View {
         // changes. A hard `.frame(height:)` outside the TimelineView removes that entirely.
         .frame(height: rowHeight, alignment: .top)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .clipped()
     }
 
     private var cardSet: some View {

@@ -66,18 +66,22 @@ struct OnboardingView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            if viewModel.currentStep != .welcome {
-                Button {
-                    Haptics.light()
-                    viewModel.goBack()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.body.weight(.semibold))
-                        .frame(width: 36, height: 36)
-                        .liquidGlassCard(tint: Color.secondary.opacity(0.15), cornerRadius: 18, interactive: true)
-                }
-                .buttonStyle(.plain)
+            // Always laid out (never `if`-removed) so it keeps claiming its space on the
+            // .welcome step too — conditionally removing it shifted the progress bar's width
+            // each time the back button appeared/disappeared. Hidden with opacity instead, and
+            // disabled so it isn't a hidden tap target while invisible.
+            Button {
+                Haptics.light()
+                viewModel.goBack()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 36, height: 36)
+                    .liquidGlassCard(tint: Color.secondary.opacity(0.15), cornerRadius: 18, interactive: true)
             }
+            .buttonStyle(.plain)
+            .opacity(viewModel.currentStep == .welcome ? 0 : 1)
+            .disabled(viewModel.currentStep == .welcome)
 
             OnboardingProgressBar(currentStep: viewModel.currentStep)
         }
